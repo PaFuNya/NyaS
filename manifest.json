@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "极简术语划词测试",
+  "version": "1.0",
+  "description": "选中文字后弹出提示框",
+  "permissions": ["activeTab", "scripting"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ]
+}
