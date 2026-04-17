@@ -7,7 +7,7 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    设计 Token（在 #my-ext-panel 作用域内定义，不污染全局）
    ═══════════════════════════════════════════════════════════════════════════ */
-#my-ext-panel,
+.my-ext-panel,
 #my-ext-icon {
   --ext-accent:          #5b6af0;
   --ext-accent-hover:    #4554e8;
@@ -77,11 +77,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    悬浮面板容器
    ═══════════════════════════════════════════════════════════════════════════ */
-#my-ext-panel {
+.my-ext-panel {
   all: initial;
   display: flex;
   flex-direction: column;
-  position: absolute;
+  position: absolute;   /* 默认吸附页面，pin screen 模式切换为 fixed */
   z-index: 2147483647;
   width: 360px;
   background: var(--ext-bg);
@@ -101,9 +101,37 @@
               transform var(--ext-transition);
 }
 
-#my-ext-panel.my-ext-panel--visible {
+.my-ext-panel.my-ext-panel--visible {
   opacity: 1;
   transform: translateY(0) scale(1);
+}
+
+/* 钉住状态：页面模式（position:absolute，随页面滚动） */
+.my-ext-panel[data-pin-mode="page"] .my-ext-panel-header {
+  background: linear-gradient(180deg, #fffbf0 0%, #fffef5 100%);
+}
+
+.my-ext-panel[data-pin-mode="page"] .my-ext-panel-title::after {
+  content: '·页';
+  font-size: 10px;
+  font-weight: 400;
+  color: #d97706;
+  margin-left: 4px;
+  opacity: 0.8;
+}
+
+/* 钉住状态：屏幕模式（position:fixed，始终显示） */
+.my-ext-panel[data-pin-mode="screen"] .my-ext-panel-header {
+  background: linear-gradient(180deg, #f0f4ff 0%, #f5f8ff 100%);
+}
+
+.my-ext-panel[data-pin-mode="screen"] .my-ext-panel-title::after {
+  content: '·屏';
+  font-size: 10px;
+  font-weight: 400;
+  color: #5b6af0;
+  margin-left: 4px;
+  opacity: 0.8;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
@@ -199,7 +227,178 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Tab 栏
+   操作按钮栏（翻译 / 解释术语）
+   ═══════════════════════════════════════════════════════════════════════════ */
+.my-ext-action-bar {
+  all: unset;
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--ext-border);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.my-ext-btn--sm {
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  border-radius: 6px !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Accordion 堆叠卡片容器
+   ═══════════════════════════════════════════════════════════════════════════ */
+.my-ext-accordion-wrap {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow-y: auto;
+  max-height: 360px;
+}
+
+.my-ext-accordion-wrap::-webkit-scrollbar { width: 4px; }
+.my-ext-accordion-wrap::-webkit-scrollbar-track { background: transparent; }
+.my-ext-accordion-wrap::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+
+/* 单张折叠卡片 */
+.my-ext-accordion {
+  all: unset;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--ext-border);
+}
+
+.my-ext-accordion:last-child {
+  border-bottom: none;
+}
+
+/* 卡片头部（可点击折叠） */
+.my-ext-accordion-header {
+  all: unset;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background var(--ext-transition);
+}
+
+.my-ext-accordion-header:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.my-ext-accordion-title {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-sizing: border-box;
+}
+
+/* 模型名称徽标 */
+.my-ext-accordion-badge {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-family: var(--ext-font);
+  padding: 2px 7px;
+  border-radius: 5px;
+  letter-spacing: 0.02em;
+  box-sizing: border-box;
+}
+
+.my-ext-accordion-badge--deepseek {
+  color: #4554e8;
+  background: #eef0ff;
+}
+
+.my-ext-accordion-badge--qwen {
+  color: #c2410c;
+  background: #fff7ed;
+}
+
+/* 状态指示点 */
+.my-ext-accordion-dot {
+  all: unset;
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  box-sizing: border-box;
+  transition: background var(--ext-transition);
+}
+
+.my-ext-accordion-dot--loading {
+  background: var(--ext-accent);
+  animation: my-ext-spin 0.9s linear infinite;
+  border-radius: 50%;
+  border: 1.5px solid #c7cbf9;
+  border-top-color: var(--ext-accent);
+  background: transparent;
+}
+
+.my-ext-accordion-dot--success {
+  background: #16a34a;
+}
+
+.my-ext-accordion-dot--error {
+  background: #dc2626;
+}
+
+/* 折叠箭头 */
+.my-ext-accordion-chevron {
+  all: unset;
+  display: flex;
+  align-items: center;
+  color: var(--ext-text-muted);
+  transition: transform var(--ext-transition);
+  box-sizing: border-box;
+}
+
+.my-ext-accordion-chevron--up {
+  transform: rotate(180deg);
+}
+
+/* 卡片内容主体（带高度过渡动画） */
+.my-ext-accordion-body {
+  all: unset;
+  display: block;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  box-sizing: border-box;
+}
+
+.my-ext-accordion-body--open {
+  max-height: 500px;
+}
+
+/* 卡片内容内边距 */
+.my-ext-accordion-body .my-ext-loading,
+.my-ext-accordion-body .my-ext-hint,
+.my-ext-accordion-body .my-ext-result-header,
+.my-ext-accordion-body .my-ext-error {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.my-ext-accordion-body .my-ext-loading { padding: 8px 0 10px; }
+.my-ext-accordion-body .my-ext-hint    { padding: 6px 0 10px; }
+
+.my-ext-accordion-body .my-ext-result-header { margin-top: 10px; }
+.my-ext-accordion-body .my-ext-result-body   { padding: 0 10px 0; margin-bottom: 8px; }
+.my-ext-accordion-body .my-ext-result-footer { padding: 0 10px 10px; }
+.my-ext-accordion-body .my-ext-error         { margin-top: 8px; margin-bottom: 4px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Tab 栏（保留旧代码兼容，v3 中不再使用）
    ═══════════════════════════════════════════════════════════════════════════ */
 .my-ext-tabbar {
   all: unset;
@@ -259,14 +458,14 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   内容区
+   内容区（v2 遗留，v3 中由 accordion-wrap 替代）
    ═══════════════════════════════════════════════════════════════════════════ */
 .my-ext-content {
   all: unset;
   display: block;
-  padding: 12px;
+  padding: 10px;
   box-sizing: border-box;
-  min-height: 80px;
+  min-height: 60px;
 }
 
 /* 操作按钮行 */
@@ -482,4 +681,122 @@
   white-space: pre-wrap;
   word-break: break-word;
   box-sizing: border-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DeepSeek Combined 双效结果展示
+   ═══════════════════════════════════════════════════════════════════════════ */
+.my-ext-combined-section {
+  all: unset;
+  display: block;
+  padding: 8px 10px 10px;
+  box-sizing: border-box;
+}
+
+.my-ext-combined-section + .my-ext-combined-section {
+  border-top: 1px solid var(--ext-border);
+}
+
+.my-ext-combined-title {
+  all: unset;
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ext-accent);
+  font-family: var(--ext-font);
+  margin-bottom: 6px;
+  box-sizing: border-box;
+}
+
+.my-ext-combined-body {
+  all: unset;
+  display: block;
+  font-size: 13.5px;
+  color: var(--ext-text-primary);
+  font-family: var(--ext-font);
+  line-height: 1.75;
+  white-space: pre-wrap;
+  word-break: break-word;
+  box-sizing: border-box;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PinDropdown — 固定模式选择下拉
+   ═══════════════════════════════════════════════════════════════════════════ */
+.my-ext-pin-dropdown {
+  all: initial;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  z-index: 2147483647;
+  width: 192px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow:
+    0 4px 6px -1px rgba(0,0,0,0.08),
+    0 12px 24px -4px rgba(0,0,0,0.13),
+    0 0 0 1px rgba(0,0,0,0.05);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+               'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+  box-sizing: border-box;
+
+  opacity: 0;
+  transform: translateY(-4px) scale(0.97);
+  transition: opacity 0.14s ease, transform 0.14s ease;
+}
+
+.my-ext-pin-dropdown--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.my-ext-pin-option {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
+  transition: background 0.12s ease;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.my-ext-pin-option:last-child {
+  border-bottom: none;
+}
+
+.my-ext-pin-option:hover {
+  background: #f3f4f6;
+}
+
+.my-ext-pin-option-icon {
+  all: unset;
+  font-size: 18px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.my-ext-pin-option-title {
+  all: unset;
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  font-family: inherit;
+  line-height: 1.3;
+}
+
+.my-ext-pin-option-desc {
+  all: unset;
+  display: block;
+  font-size: 11px;
+  color: #9ca3af;
+  font-family: inherit;
+  margin-top: 2px;
+  line-height: 1.4;
 }

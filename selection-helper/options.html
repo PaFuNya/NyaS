@@ -26,11 +26,13 @@
         </div>
         <div>
           <div class="sidebar-title">划词助手</div>
-          <div class="sidebar-version">v2.0.0</div>
+          <div class="sidebar-version">v3.0.0</div>
         </div>
       </div>
 
       <nav class="sidebar-nav">
+
+        <!-- API 配置 -->
         <button class="nav-item nav-item--active" data-section="api-config">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -40,6 +42,37 @@
           <span>API 配置</span>
         </button>
 
+        <!-- 基础设置 -->
+        <button class="nav-item" data-section="basic-settings">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+          <span>基础设置</span>
+        </button>
+
+        <!-- 语言匹配 -->
+        <button class="nav-item" data-section="language-match">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="2" y1="12" x2="22" y2="12"/>
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+          </svg>
+          <span>语言匹配</span>
+        </button>
+
+        <!-- 触发规则 -->
+        <button class="nav-item" data-section="trigger-rules">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+          </svg>
+          <span>触发规则</span>
+          <span class="nav-badge">核心</span>
+        </button>
+
+        <!-- 偏好设置 -->
         <button class="nav-item" data-section="preferences">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -49,6 +82,7 @@
           <span>偏好设置</span>
         </button>
 
+        <!-- 关于 -->
         <button class="nav-item" data-section="about">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -58,6 +92,7 @@
           </svg>
           <span>关于</span>
         </button>
+
       </nav>
 
       <div class="sidebar-footer">
@@ -95,21 +130,14 @@
           <div class="field">
             <label class="field-label" for="deepseek-key">
               API Key
-              <a href="https://platform.deepseek.com/api_keys" target="_blank" class="field-link">
-                获取 Key ↗
-              </a>
+              <a href="https://platform.deepseek.com/api_keys" target="_blank" class="field-link">获取 Key ↗</a>
             </label>
             <div class="input-wrap">
-              <input
-                type="password"
-                id="deepseek-key"
-                class="field-input"
-                placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                autocomplete="off"
-                spellcheck="false"
-              />
+              <input type="password" id="deepseek-key" class="field-input"
+                     placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                     autocomplete="off" spellcheck="false"/>
               <button class="eye-btn" data-target="deepseek-key" aria-label="显示/隐藏">
-                <svg class="eye-icon eye-icon--show" data-eye="deepseek-key"
+                <svg class="eye-icon" data-eye="deepseek-key"
                      xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                      viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -137,21 +165,14 @@
           <div class="field">
             <label class="field-label" for="qwen-key">
               API Key
-              <a href="https://bailian.console.aliyun.com/" target="_blank" class="field-link">
-                获取 Key ↗
-              </a>
+              <a href="https://bailian.console.aliyun.com/" target="_blank" class="field-link">获取 Key ↗</a>
             </label>
             <div class="input-wrap">
-              <input
-                type="password"
-                id="qwen-key"
-                class="field-input"
-                placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                autocomplete="off"
-                spellcheck="false"
-              />
+              <input type="password" id="qwen-key" class="field-input"
+                     placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                     autocomplete="off" spellcheck="false"/>
               <button class="eye-btn" data-target="qwen-key" aria-label="显示/隐藏">
-                <svg class="eye-icon eye-icon--show" data-eye="qwen-key"
+                <svg class="eye-icon" data-eye="qwen-key"
                      xmlns="http://www.w3.org/2000/svg" width="16" height="16"
                      viewBox="0 0 24 24" fill="none" stroke="currentColor"
                      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -169,11 +190,141 @@
         </div>
       </section>
 
+      <!-- ─── Section: 基础设置 ─── -->
+      <section id="section-basic-settings" class="section">
+        <div class="section-header">
+          <h1 class="section-title">基础设置</h1>
+          <p class="section-desc">控制划词助手的基础行为模式。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-brand">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+              行为控制
+            </div>
+          </div>
+
+          <!-- 不在输入框划词 -->
+          <div class="toggle-field">
+            <div class="toggle-info">
+              <div class="toggle-label">不在输入框中划词</div>
+              <div class="toggle-desc">
+                自动屏蔽 <code>input</code>、<code>textarea</code>、
+                <code>CodeMirror</code>、<code>Monaco</code> 等文本编辑器区域内的划词操作，
+                防止干扰正常输入。
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-disable-in-inputs" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <!-- 触摸模式 -->
+          <div class="toggle-field">
+            <div class="toggle-info">
+              <div class="toggle-label">触摸模式</div>
+              <div class="toggle-desc">
+                为触屏设备优化交互。开启后使用 <code>touchend</code> 事件代替 <code>mouseup</code>，
+                适合平板等触控场景。
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-touch-mode" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-actions">
+          <button class="btn-primary" id="btn-save-basic">保存基础设置</button>
+        </div>
+      </section>
+
+      <!-- ─── Section: 语言匹配 ─── -->
+      <section id="section-language-match" class="section">
+        <div class="section-header">
+          <h1 class="section-title">语言匹配</h1>
+          <p class="section-desc">只对包含指定语言的文本触发查词。不勾选任何语言表示不过滤（对所有文本生效）。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-brand">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+              </svg>
+              语言选择
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="field-label">启用的语言</label>
+            <p class="field-desc">划选文本包含以下语言时，才会触发查词面板。</p>
+            <div class="lang-chips" id="lang-chips">
+              <!-- 由 options.js 动态生成 -->
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <!-- 严格模式 -->
+          <div class="toggle-field">
+            <div class="toggle-info">
+              <div class="toggle-label">严格匹配模式</div>
+              <div class="toggle-desc">
+                <strong>关闭（默认）：</strong>文本中检测到的语种，只要有<em>任意一种</em>在启用列表中，即触发。<br/>
+                <strong>开启：</strong>文本中所有检测到的语种都必须在启用列表中，才触发（更严格）。
+              </div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="toggle-strict-lang" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="section-actions">
+          <button class="btn-primary" id="btn-save-lang">保存语言设置</button>
+        </div>
+      </section>
+
+      <!-- ─── Section: 触发规则 ─── -->
+      <section id="section-trigger-rules" class="section">
+        <div class="section-header">
+          <h1 class="section-title">触发规则</h1>
+          <p class="section-desc">
+            针对 4 种不同的划词场景，分别配置触发查词面板的方式。
+            多个选项可同时开启，存在优先级：<strong>双击 › 组合键 › 直接搜索 › 显示图标</strong>。
+          </p>
+        </div>
+
+        <!-- 4 个场景卡片，由 options.js 动态注入到 #trigger-rules-container -->
+        <div id="trigger-rules-container">
+          <!-- 动态生成 -->
+        </div>
+
+        <div class="section-actions">
+          <button class="btn-primary" id="btn-save-trigger">保存触发规则</button>
+        </div>
+      </section>
+
       <!-- ─── Section: 偏好设置 ─── -->
       <section id="section-preferences" class="section">
         <div class="section-header">
           <h1 class="section-title">偏好设置</h1>
-          <p class="section-desc">自定义划词助手的默认行为和展示方式。</p>
+          <p class="section-desc">自定义面板打开时的默认操作行为。</p>
         </div>
 
         <div class="card">
@@ -188,28 +339,11 @@
           </div>
 
           <div class="field">
-            <label class="field-label" for="preferred-model">首选模型</label>
-            <p class="field-desc">打开面板时默认激活的 Tab。</p>
-            <div class="select-wrap">
-              <select id="preferred-model" class="field-select">
-                <option value="deepseek">DeepSeek（优先）</option>
-                <option value="qwen">通义千问（优先）</option>
-                <option value="both" selected>两者都展示，手动选择</option>
-              </select>
-              <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                   stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-          </div>
-
-          <div class="field">
-            <label class="field-label" for="preferred-action">默认操作</label>
-            <p class="field-desc">点击悬浮图标展开面板时，默认显示的操作类型。</p>
+            <label class="field-label" for="preferred-action">面板打开时的默认操作</label>
+            <p class="field-desc">面板展开后，两个模型卡片默认执行的操作。</p>
             <div class="select-wrap">
               <select id="preferred-action" class="field-select">
-                <option value="none" selected>不自动触发，手动点击按钮</option>
-                <option value="translate">自动触发翻译</option>
+                <option value="translate" selected>自动触发翻译</option>
                 <option value="explain">自动触发术语解释</option>
               </select>
               <svg class="select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -240,10 +374,10 @@
             </svg>
           </div>
           <div class="about-name">划词助手</div>
-          <div class="about-version">Version 2.0.0</div>
+          <div class="about-version">Version 3.0.0</div>
           <div class="about-desc">
             基于 Manifest V3 的 Chrome 扩展，接入 DeepSeek 与通义千问，<br/>
-            让 AI 驱动的翻译与术语解释触手可及。
+            让 AI 驱动的翻译与术语解释触手可及。对标沙拉查词交互体验。
           </div>
         </div>
 
@@ -258,13 +392,12 @@
               使用说明
             </div>
           </div>
-
           <ol class="usage-list">
-            <li>在 <strong>API 配置</strong> 页面填入 DeepSeek 或通义千问的 API Key 并保存。</li>
-            <li>在任意网页上，用鼠标划选文字（1 到 500 个字符）。</li>
-            <li>松开鼠标后，光标右下角会出现一个<strong>蓝紫色气泡图标</strong>。</li>
-            <li>点击图标，展开面板，选择 <strong>翻译</strong> 或 <strong>解释术语</strong>。</li>
-            <li>在 DeepSeek 和通义千问两个 Tab 之间切换，对比结果。</li>
+            <li>在 <strong>API 配置</strong> 页填入 DeepSeek 或通义千问的 API Key 并保存。</li>
+            <li>在 <strong>触发规则</strong> 页配置各场景的触发方式（默认：划词显示小图标）。</li>
+            <li>在任意网页上，用鼠标划选文字（1 ~ 500 字符）。</li>
+            <li>点击出现的气泡图标，DeepSeek 和通义千问将<strong>同时</strong>返回结果。</li>
+            <li>点击面板顶部 <strong>📌 固定</strong> 按钮可钉住面板，方便连续查词。</li>
           </ol>
         </div>
 
