@@ -1,0 +1,253 @@
+/**
+ * 划词助手 — 悬浮面板样式
+ * 所有选择器均使用 my-ext- 前缀，防止污染宿主页面样式。
+ * 使用 CSS 自定义属性统一管理视觉 Token。
+ */
+
+/* ─── 设计 Token ─────────────────────────────────────────────────────────────── */
+#my-ext-panel {
+  --ext-bg: #ffffff;
+  --ext-border: rgba(0, 0, 0, 0.08);
+  --ext-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 10px 24px -4px rgba(0, 0, 0, 0.12),
+                0 0 0 1px rgba(0, 0, 0, 0.04);
+  --ext-radius: 12px;
+  --ext-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+              'Microsoft YaHei', sans-serif;
+  --ext-text-primary: #1a1a2e;
+  --ext-text-secondary: #6b7280;
+  --ext-text-preview: #374151;
+  --ext-accent: #5b6af0;
+  --ext-accent-hover: #4554e8;
+  --ext-accent-active: #3644d8;
+  --ext-btn-ghost-hover: #f3f4f6;
+  --ext-result-header-bg: #f8f9ff;
+  --ext-result-body-bg: #fafafa;
+  --ext-error-color: #dc2626;
+  --ext-error-bg: #fef2f2;
+  --ext-spinner-color: #5b6af0;
+  --ext-transition: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --ext-width: 320px;
+}
+
+/* ─── 面板容器 ───────────────────────────────────────────────────────────────── */
+#my-ext-panel {
+  all: initial; /* 重置所有宿主样式继承 */
+  display: block;
+  position: absolute;
+  z-index: 2147483647; /* 始终在最顶层 */
+  width: var(--ext-width);
+  background: var(--ext-bg);
+  border-radius: var(--ext-radius);
+  box-shadow: var(--ext-shadow);
+  border: 1px solid var(--ext-border);
+  font-family: var(--ext-font);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ext-text-primary);
+  box-sizing: border-box;
+  padding: 12px;
+  overflow: hidden;
+
+  /* 入场动画初始状态 */
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transition: opacity var(--ext-transition),
+              transform var(--ext-transition);
+}
+
+/* 入场动画触发态 */
+#my-ext-panel.my-ext-panel--visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+/* ─── 文本预览区 ──────────────────────────────────────────────────────────────── */
+.my-ext-preview {
+  all: unset;
+  display: block;
+  font-size: 12px;
+  color: var(--ext-text-secondary);
+  margin-bottom: 10px;
+  padding: 6px 8px;
+  background: #f9fafb;
+  border-radius: 6px;
+  border-left: 3px solid var(--ext-accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--ext-font);
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+/* ─── 操作按钮区 ──────────────────────────────────────────────────────────────── */
+.my-ext-actions {
+  all: unset;
+  display: flex;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+/* ─── 按钮基础样式 ────────────────────────────────────────────────────────────── */
+.my-ext-btn {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--ext-font);
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--ext-transition),
+              color var(--ext-transition),
+              transform var(--ext-transition),
+              box-shadow var(--ext-transition);
+  box-sizing: border-box;
+  white-space: nowrap;
+
+  /* 主色按钮 */
+  background: var(--ext-accent);
+  color: #ffffff;
+}
+
+.my-ext-btn:hover {
+  background: var(--ext-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(91, 106, 240, 0.35);
+}
+
+.my-ext-btn:active {
+  background: var(--ext-accent-active);
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+/* 幽灵按钮变体 */
+.my-ext-btn.my-ext-btn--ghost {
+  background: transparent;
+  color: var(--ext-text-secondary);
+  border: 1px solid var(--ext-border);
+}
+
+.my-ext-btn.my-ext-btn--ghost:hover {
+  background: var(--ext-btn-ghost-hover);
+  color: var(--ext-text-primary);
+  box-shadow: none;
+}
+
+.my-ext-btn.my-ext-btn--ghost:active {
+  background: #e5e7eb;
+}
+
+/* ─── Loading 状态 ────────────────────────────────────────────────────────────── */
+.my-ext-loading {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+  box-sizing: border-box;
+}
+
+.my-ext-loading-text {
+  all: unset;
+  font-size: 13px;
+  color: var(--ext-text-secondary);
+  font-family: var(--ext-font);
+  line-height: 1.4;
+}
+
+/* 旋转加载图标 */
+.my-ext-spinner {
+  all: unset;
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid #e5e7eb;
+  border-top-color: var(--ext-spinner-color);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: my-ext-spin 0.75s linear infinite;
+  box-sizing: border-box;
+}
+
+@keyframes my-ext-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ─── 结果展示状态 ────────────────────────────────────────────────────────────── */
+.my-ext-result-header {
+  all: unset;
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ext-accent);
+  background: var(--ext-result-header-bg);
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  font-family: var(--ext-font);
+  box-sizing: border-box;
+  letter-spacing: 0.02em;
+}
+
+.my-ext-result-body {
+  all: unset;
+  display: block;
+  font-size: 13px;
+  color: var(--ext-text-primary);
+  line-height: 1.7;
+  padding: 6px 8px;
+  background: var(--ext-result-body-bg);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--ext-font);
+  box-sizing: border-box;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+/* 结果文本滚动条 */
+.my-ext-result-body::-webkit-scrollbar {
+  width: 4px;
+}
+.my-ext-result-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+.my-ext-result-body::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 2px;
+}
+
+.my-ext-result-footer {
+  all: unset;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  box-sizing: border-box;
+}
+
+/* ─── 错误状态 ────────────────────────────────────────────────────────────────── */
+.my-ext-error {
+  all: unset;
+  display: block;
+  font-size: 13px;
+  color: var(--ext-error-color);
+  background: var(--ext-error-bg);
+  border-radius: 8px;
+  padding: 10px 12px;
+  line-height: 1.6;
+  font-family: var(--ext-font);
+  box-sizing: border-box;
+  border: 1px solid #fecaca;
+}
