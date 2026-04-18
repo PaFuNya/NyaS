@@ -17,55 +17,55 @@
 // ─── 常量定义 ─────────────────────────────────────────────────────────────────
 
 const LANGUAGES = [
-  { key: 'zh', label: '中文',     emoji: '🇨🇳' },
-  { key: 'en', label: '英文',     emoji: '🇺🇸' },
-  { key: 'ja', label: '日文',     emoji: '🇯🇵' },
-  { key: 'ko', label: '韩文',     emoji: '🇰🇷' },
-  { key: 'fr', label: '法文',     emoji: '🇫🇷' },
+  { key: 'zh', label: '中文', emoji: '🇨🇳' },
+  { key: 'en', label: '英文', emoji: '🇺🇸' },
+  { key: 'ja', label: '日文', emoji: '🇯🇵' },
+  { key: 'ko', label: '韩文', emoji: '🇰🇷' },
+  { key: 'fr', label: '法文', emoji: '🇫🇷' },
   { key: 'es', label: '西班牙文', emoji: '🇪🇸' },
-  { key: 'de', label: '德文',     emoji: '🇩🇪' },
+  { key: 'de', label: '德文', emoji: '🇩🇪' },
 ];
 
 const TRIGGER_SCENARIOS = [
   {
-    key:   'normal',
-    label: '普通划词',
-    icon:  '🖱️',
-    desc:  '在普通页面上划选文字时的触发方式（面板未打开或未固定）。',
+    key: 'normal',
+    label: '普通划词 喵~',
+    icon: '🖱️',
+    desc: '在普通页面上划选文字时的触发方式喵~（面板未打开或未固定）喵！',
   },
   {
-    key:   'pinned',
-    label: '面板钉住后划词',
-    icon:  '📌',
-    desc:  '查词面板被【📌 固定】时，在外部页面继续划选文字的触发方式。',
+    key: 'pinned',
+    label: '面板钉住后划词 喵~',
+    icon: '📌',
+    desc: '查词面板被【📌 固定 喵~】时，在外部页面继续划选文字的触发方式喵！',
   },
   {
-    key:   'insidePanel',
-    label: '面板内部划词',
-    icon:  '📋',
-    desc:  '在已打开的查词面板内部选中文字时的触发方式（如划选翻译结果中的单词再查词）。',
+    key: 'insidePanel',
+    label: '面板内部划词 喵~',
+    icon: '📋',
+    desc: '在已打开的查词面板内部选中文字时的触发方式喵~（如划选翻译结果中的单词再查词）喵！',
   },
   {
-    key:   'standalone',
-    label: '独立窗口划词',
-    icon:  '🪟',
-    desc:  '在扩展的独立弹出窗口中划词时的触发方式（预留场景）。',
+    key: 'standalone',
+    label: '独立窗口划词 喵~',
+    icon: '🪟',
+    desc: '在扩展的独立弹出窗口中划词时的触发方式喵~（预留场景）喵！',
   },
 ];
 
 const MODIFIER_KEYS = [
-  { key: 'ctrl',  label: 'Ctrl'  },
-  { key: 'alt',   label: 'Alt'   },
+  { key: 'ctrl', label: 'Ctrl' },
+  { key: 'alt', label: 'Alt' },
   { key: 'shift', label: 'Shift' },
-  { key: 'meta',  label: '⌘ Meta' },
+  { key: 'meta', label: '⌘ Meta' },
 ];
 
 const DEFAULT_TRIGGER_RULE = {
-  showIcon:       true,
-  directSearch:   false,
+  showIcon: true,
+  directSearch: false,
   dblclickSearch: false,
-  modifiers:      [],
-  hoverSelect:    false,
+  modifiers: [],
+  hoverSelect: false,
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -74,15 +74,15 @@ const DEFAULT_TRIGGER_RULE = {
 
 class ToastManager {
   constructor(el) {
-    this._el    = el;
+    this._el = el;
     this._timer = null;
   }
 
   show(type, message) {
     if (this._timer) clearTimeout(this._timer);
-    const icon = type === 'success' ? '✓' : '✕';
-    this._el.innerHTML  = `<span class="toast-icon">${icon}</span><span>${message}</span>`;
-    this._el.className  = `toast toast--${type}`;
+    const icon = type === 'success' ? '🐱' : '😿';
+    this._el.innerHTML = `<span class="toast-icon">${icon}</span><span>${message}</span>`;
+    this._el.className = `toast toast--${type}`;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => this._el.classList.add('toast--show'));
     });
@@ -122,12 +122,12 @@ class NavController {
 
 class ApiConfigSection {
   constructor(toast) {
-    this._toast        = toast;
+    this._toast = toast;
     this._deepseekInput = document.getElementById('deepseek-key');
-    this._qwenInput     = document.getElementById('qwen-key');
+    this._qwenInput = document.getElementById('qwen-key');
     this._statusDeepseek = document.getElementById('status-deepseek');
-    this._statusQwen     = document.getElementById('status-qwen');
-    this._btnSave        = document.getElementById('btn-save-api');
+    this._statusQwen = document.getElementById('status-qwen');
+    this._btnSave = document.getElementById('btn-save-api');
   }
 
   init() {
@@ -139,51 +139,51 @@ class ApiConfigSection {
 
   load(stored) {
     if (stored.deepseekKey) this._deepseekInput.value = stored.deepseekKey;
-    if (stored.qwenKey)     this._qwenInput.value     = stored.qwenKey;
+    if (stored.qwenKey) this._qwenInput.value = stored.qwenKey;
     this._updateStatus(this._deepseekInput, this._statusDeepseek);
     this._updateStatus(this._qwenInput, this._statusQwen);
   }
 
   _save() {
     const deepseekKey = this._deepseekInput.value.trim();
-    const qwenKey     = this._qwenInput.value.trim();
+    const qwenKey = this._qwenInput.value.trim();
 
     if (deepseekKey && !deepseekKey.startsWith('sk-')) {
-      this._toast.show('error', 'DeepSeek API Key 格式有误，应以 sk- 开头');
+      this._toast.show('error', 'DeepSeek API Key 格式有误喵~ 应以 sk- 开头');
       this._deepseekInput.focus();
       return;
     }
     if (qwenKey && !qwenKey.startsWith('sk-')) {
-      this._toast.show('error', '通义千问 API Key 格式有误，应以 sk- 开头');
+      this._toast.show('error', '通义千问 API Key 格式有误喵~ 应以 sk- 开头');
       this._qwenInput.focus();
       return;
     }
     if (!deepseekKey && !qwenKey) {
-      this._toast.show('error', '请至少填写一个 API Key');
+      this._toast.show('error', '请至少填写一个 API Key 喵~');
       return;
     }
 
-    this._btnSave.disabled    = true;
-    this._btnSave.textContent = '保存中…';
+    this._btnSave.disabled = true;
+    this._btnSave.textContent = '保存中喵~';
 
     chrome.storage.local.set({ deepseekKey, qwenKey }, () => {
-      this._btnSave.disabled    = false;
-      this._btnSave.textContent = '保存 API 配置';
+      this._btnSave.disabled = false;
+      this._btnSave.textContent = '保存 API 配置 喵~';
       if (chrome.runtime.lastError) {
-        this._toast.show('error', `保存失败：${chrome.runtime.lastError.message}`);
+        this._toast.show('error', `保存失败喵~ ${chrome.runtime.lastError.message}`);
         return;
       }
       this._updateStatus(this._deepseekInput, this._statusDeepseek);
       this._updateStatus(this._qwenInput, this._statusQwen);
-      this._toast.show('success', 'API 配置已保存，立即生效 ✓');
+      this._toast.show('success', 'API 配置已保存喵~ 立即生效 ✓');
     });
   }
 
   _updateStatus(input, statusEl) {
     if (!statusEl) return;
     const has = input.value.trim().length > 0;
-    statusEl.className   = `key-status ${has ? 'configured' : 'missing'}`;
-    statusEl.textContent = has ? '✓ 已配置' : '○ 未填写';
+    statusEl.className = `key-status ${has ? 'configured' : 'missing'}`;
+    statusEl.textContent = has ? '✓ 已配置喵~' : '○ 未填写喵~';
   }
 
   _initKeyStatusWatchers() {
@@ -198,16 +198,16 @@ class ApiConfigSection {
   }
 
   _initEyeToggles() {
-    const EYE_OPEN   = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
+    const EYE_OPEN = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>`;
     const EYE_CLOSED = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
 
     document.querySelectorAll('.eye-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
-        const input   = document.getElementById(btn.dataset.target);
+        const input = document.getElementById(btn.dataset.target);
         if (!input) return;
         const showing = input.type === 'text';
-        input.type    = showing ? 'password' : 'text';
-        const svg     = btn.querySelector('svg');
+        input.type = showing ? 'password' : 'text';
+        const svg = btn.querySelector('svg');
         if (svg) svg.innerHTML = showing ? EYE_OPEN : EYE_CLOSED;
         btn.setAttribute('aria-label', showing ? '显示密码' : '隐藏密码');
       });
@@ -221,10 +221,10 @@ class ApiConfigSection {
 
 class BasicSettingsSection {
   constructor(toast) {
-    this._toast         = toast;
-    this._chkInputs     = document.getElementById('toggle-disable-in-inputs');
-    this._chkTouch      = document.getElementById('toggle-touch-mode');
-    this._btnSave       = document.getElementById('btn-save-basic');
+    this._toast = toast;
+    this._chkInputs = document.getElementById('toggle-disable-in-inputs');
+    this._chkTouch = document.getElementById('toggle-touch-mode');
+    this._btnSave = document.getElementById('btn-save-basic');
   }
 
   init() {
@@ -233,24 +233,24 @@ class BasicSettingsSection {
 
   load(stored) {
     this._chkInputs.checked = stored.disableInInputs !== false; // 默认 true
-    this._chkTouch.checked  = stored.touchMode === true;
+    this._chkTouch.checked = stored.touchMode === true;
   }
 
   _save() {
-    this._btnSave.disabled    = true;
-    this._btnSave.textContent = '保存中…';
+    this._btnSave.disabled = true;
+    this._btnSave.textContent = '保存中喵~';
 
     chrome.storage.local.set({
       disableInInputs: this._chkInputs.checked,
-      touchMode:       this._chkTouch.checked,
+      touchMode: this._chkTouch.checked,
     }, () => {
-      this._btnSave.disabled    = false;
-      this._btnSave.textContent = '保存基础设置';
+      this._btnSave.disabled = false;
+      this._btnSave.textContent = '保存基础设置 喵~';
       if (chrome.runtime.lastError) {
-        this._toast.show('error', `保存失败：${chrome.runtime.lastError.message}`);
+        this._toast.show('error', `保存失败喵~ ${chrome.runtime.lastError.message}`);
         return;
       }
-      this._toast.show('success', '基础设置已保存 ✓');
+      this._toast.show('success', '基础设置已保存喵~ ✓');
     });
   }
 }
@@ -261,10 +261,10 @@ class BasicSettingsSection {
 
 class LangMatchSection {
   constructor(toast) {
-    this._toast      = toast;
-    this._container  = document.getElementById('lang-chips');
-    this._chkStrict  = document.getElementById('toggle-strict-lang');
-    this._btnSave    = document.getElementById('btn-save-lang');
+    this._toast = toast;
+    this._container = document.getElementById('lang-chips');
+    this._chkStrict = document.getElementById('toggle-strict-lang');
+    this._btnSave = document.getElementById('btn-save-lang');
     this._checkboxes = {}; // { zh: HTMLInputElement, ... }
   }
 
@@ -287,11 +287,11 @@ class LangMatchSection {
     LANGUAGES.forEach(({ key, label, emoji }) => {
       const chip = document.createElement('label');
       chip.className = 'lang-chip';
-      chip.htmlFor   = `lang-${key}`;
+      chip.htmlFor = `lang-${key}`;
 
       const chk = document.createElement('input');
-      chk.type  = 'checkbox';
-      chk.id    = `lang-${key}`;
+      chk.type = 'checkbox';
+      chk.id = `lang-${key}`;
       chk.value = key;
 
       const span = document.createElement('span');
@@ -314,20 +314,20 @@ class LangMatchSection {
     for (const [key, chk] of Object.entries(this._checkboxes)) {
       languages[key] = chk.checked;
     }
-    this._btnSave.disabled    = true;
-    this._btnSave.textContent = '保存中…';
+    this._btnSave.disabled = true;
+    this._btnSave.textContent = '保存中喵~';
 
     chrome.storage.local.set({
       languages,
       strictLanguageMatch: this._chkStrict.checked,
     }, () => {
-      this._btnSave.disabled    = false;
-      this._btnSave.textContent = '保存语言设置';
+      this._btnSave.disabled = false;
+      this._btnSave.textContent = '保存语言设置 喵~';
       if (chrome.runtime.lastError) {
-        this._toast.show('error', `保存失败：${chrome.runtime.lastError.message}`);
+        this._toast.show('error', `保存失败喵~ ${chrome.runtime.lastError.message}`);
         return;
       }
-      this._toast.show('success', '语言设置已保存 ✓');
+      this._toast.show('success', '语言设置已保存喵~ ✓');
     });
   }
 }
@@ -338,10 +338,10 @@ class LangMatchSection {
 
 class TriggerRulesSection {
   constructor(toast) {
-    this._toast     = toast;
+    this._toast = toast;
     this._container = document.getElementById('trigger-rules-container');
-    this._btnSave   = document.getElementById('btn-save-trigger');
-    this._fields    = {}; // { scenarioKey: { showIcon, directSearch, ... } }
+    this._btnSave = document.getElementById('btn-save-trigger');
+    this._fields = {}; // { scenarioKey: { showIcon, directSearch, ... } }
   }
 
   init() {
@@ -354,14 +354,14 @@ class TriggerRulesSection {
   load(stored) {
     const rules = stored.triggerRules || {};
     for (const { key } of TRIGGER_SCENARIOS) {
-      const rule   = rules[key] || DEFAULT_TRIGGER_RULE;
+      const rule = rules[key] || DEFAULT_TRIGGER_RULE;
       const fields = this._fields[key];
       if (!fields) continue;
 
-      fields.showIcon.checked       = rule.showIcon       ?? DEFAULT_TRIGGER_RULE.showIcon;
-      fields.directSearch.checked   = rule.directSearch   ?? DEFAULT_TRIGGER_RULE.directSearch;
+      fields.showIcon.checked = rule.showIcon ?? DEFAULT_TRIGGER_RULE.showIcon;
+      fields.directSearch.checked = rule.directSearch ?? DEFAULT_TRIGGER_RULE.directSearch;
       fields.dblclickSearch.checked = rule.dblclickSearch ?? DEFAULT_TRIGGER_RULE.dblclickSearch;
-      fields.hoverSelect.checked    = rule.hoverSelect    ?? DEFAULT_TRIGGER_RULE.hoverSelect;
+      fields.hoverSelect.checked = rule.hoverSelect ?? DEFAULT_TRIGGER_RULE.hoverSelect;
 
       // 组合键
       MODIFIER_KEYS.forEach(({ key: mk }) => {
@@ -389,7 +389,7 @@ class TriggerRulesSection {
 
     // 描述
     const descEl = document.createElement('p');
-    descEl.className   = 'field-desc trigger-card-desc';
+    descEl.className = 'field-desc trigger-card-desc';
     descEl.textContent = desc;
     card.appendChild(descEl);
 
@@ -397,10 +397,10 @@ class TriggerRulesSection {
     const opts = document.createElement('div');
     opts.className = 'trigger-options';
 
-    const showIconChk       = this._makeCheckRow(opts, `${scenarioKey}-showIcon`,       '显示图标',     '划词后在光标附近出现小气泡图标，悬停或点击后展开面板。');
-    const directSearchChk   = this._makeCheckRow(opts, `${scenarioKey}-directSearch`,   '直接搜索',     '划词后直接弹出大面板，同时向两个模型发起请求，无需点击图标。');
-    const dblclickSearchChk = this._makeCheckRow(opts, `${scenarioKey}-dblclickSearch`, '双击搜索',     '仅双击选词时才直接弹出面板（优先级高于"直接搜索"）。');
-    const hoverSelectChk    = this._makeCheckRow(opts, `${scenarioKey}-hoverSelect`,    '鼠标悬浮取词', '无需点击，鼠标悬停约 0.6 秒后自动选取光标周边单词并显示图标。');
+    const showIconChk = this._makeCheckRow(opts, `${scenarioKey}-showIcon`, '显示图标 喵~', '划词后在光标附近出现小气泡图标喵~ 悬停或点击后展开面板喵！');
+    const directSearchChk = this._makeCheckRow(opts, `${scenarioKey}-directSearch`, '直接搜索 喵~', '划词后直接弹出大面板喵~ 同时向两个模型发起请求喵！无需点击图标喵~');
+    const dblclickSearchChk = this._makeCheckRow(opts, `${scenarioKey}-dblclickSearch`, '双击搜索 喵~', '仅双击选词时才直接弹出面板喵~（优先级高于"直接搜索"）喵！');
+    const hoverSelectChk = this._makeCheckRow(opts, `${scenarioKey}-hoverSelect`, '鼠标悬浮取词 喵~', '无需点击喵~ 鼠标悬停约 0.6 秒后自动选取光标周边单词并显示图标喵！');
 
     // 组合键
     const modRow = document.createElement('div');
@@ -408,9 +408,9 @@ class TriggerRulesSection {
     modRow.innerHTML = `
       <div class="trigger-option-label">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h0M10 10h0M14 10h0M18 10h0M8 14h8"/></svg>
-        组合键触发
+        组合键触发 喵~
       </div>
-      <div class="trigger-option-desc">按住以下任一修饰键划词时，强制触发直接搜索（优先级高于基础模式）。</div>
+      <div class="trigger-option-desc">按住以下任一修饰键划词时，强制触发直接搜索喵~（优先级高于基础模式）喵！</div>
     `;
     const modKeys = document.createElement('div');
     modKeys.className = 'modifier-keys';
@@ -421,8 +421,8 @@ class TriggerRulesSection {
       modLabel.className = 'modifier-key';
 
       const modChk = document.createElement('input');
-      modChk.type  = 'checkbox';
-      modChk.id    = `${scenarioKey}-mod-${mk}`;
+      modChk.type = 'checkbox';
+      modChk.id = `${scenarioKey}-mod-${mk}`;
       modChk.value = mk;
       modChk.addEventListener('change', () =>
         modLabel.classList.toggle('modifier-key--checked', modChk.checked)
@@ -445,11 +445,11 @@ class TriggerRulesSection {
 
     // 保存字段引用
     this._fields[scenarioKey] = {
-      showIcon:       showIconChk,
-      directSearch:   directSearchChk,
+      showIcon: showIconChk,
+      directSearch: directSearchChk,
       dblclickSearch: dblclickSearchChk,
-      hoverSelect:    hoverSelectChk,
-      modifiers:      modCheckboxes,
+      hoverSelect: hoverSelectChk,
+      modifiers: modCheckboxes,
     };
   }
 
@@ -460,21 +460,21 @@ class TriggerRulesSection {
 
     const labelEl = document.createElement('label');
     labelEl.className = 'trigger-check-label';
-    labelEl.htmlFor   = id;
+    labelEl.htmlFor = id;
 
     const chk = document.createElement('input');
-    chk.type  = 'checkbox';
-    chk.id    = id;
+    chk.type = 'checkbox';
+    chk.id = id;
 
     const checkMark = document.createElement('span');
     checkMark.className = 'trigger-checkmark';
 
     const textWrap = document.createElement('div');
     const titleSpan = document.createElement('span');
-    titleSpan.className   = 'trigger-option-label';
+    titleSpan.className = 'trigger-option-label';
     titleSpan.textContent = label;
     const descSpan = document.createElement('span');
-    descSpan.className   = 'trigger-option-desc';
+    descSpan.className = 'trigger-option-desc';
     descSpan.textContent = description;
 
     textWrap.appendChild(titleSpan);
@@ -500,25 +500,25 @@ class TriggerRulesSection {
         .map(({ key: mk }) => mk);
 
       triggerRules[key] = {
-        showIcon:       fields.showIcon.checked,
-        directSearch:   fields.directSearch.checked,
+        showIcon: fields.showIcon.checked,
+        directSearch: fields.directSearch.checked,
         dblclickSearch: fields.dblclickSearch.checked,
-        hoverSelect:    fields.hoverSelect.checked,
+        hoverSelect: fields.hoverSelect.checked,
         modifiers,
       };
     }
 
-    this._btnSave.disabled    = true;
-    this._btnSave.textContent = '保存中…';
+    this._btnSave.disabled = true;
+    this._btnSave.textContent = '保存中喵~';
 
     chrome.storage.local.set({ triggerRules }, () => {
-      this._btnSave.disabled    = false;
-      this._btnSave.textContent = '保存触发规则';
+      this._btnSave.disabled = false;
+      this._btnSave.textContent = '保存触发规则 喵~';
       if (chrome.runtime.lastError) {
-        this._toast.show('error', `保存失败：${chrome.runtime.lastError.message}`);
+        this._toast.show('error', `保存失败喵~ ${chrome.runtime.lastError.message}`);
         return;
       }
-      this._toast.show('success', '触发规则已保存，刷新页面后生效 ✓');
+      this._toast.show('success', '触发规则已保存喵~ 刷新页面后生效 ✓');
     });
   }
 }
@@ -529,9 +529,9 @@ class TriggerRulesSection {
 
 class PrefsSection {
   constructor(toast) {
-    this._toast          = toast;
+    this._toast = toast;
     this._preferredAction = document.getElementById('preferred-action');
-    this._btnSave        = document.getElementById('btn-save-prefs');
+    this._btnSave = document.getElementById('btn-save-prefs');
   }
 
   init() {
@@ -545,17 +545,17 @@ class PrefsSection {
   }
 
   _save() {
-    this._btnSave.disabled    = true;
-    this._btnSave.textContent = '保存中…';
+    this._btnSave.disabled = true;
+    this._btnSave.textContent = '保存中喵~';
 
     chrome.storage.local.set({ preferredAction: this._preferredAction.value }, () => {
-      this._btnSave.disabled    = false;
-      this._btnSave.textContent = '保存偏好设置';
+      this._btnSave.disabled = false;
+      this._btnSave.textContent = '保存偏好设置 喵~';
       if (chrome.runtime.lastError) {
-        this._toast.show('error', `保存失败：${chrome.runtime.lastError.message}`);
+        this._toast.show('error', `保存失败喵~ ${chrome.runtime.lastError.message}`);
         return;
       }
-      this._toast.show('success', '偏好设置已保存 ✓');
+      this._toast.show('success', '偏好设置已保存喵~ ✓');
     });
   }
 }
