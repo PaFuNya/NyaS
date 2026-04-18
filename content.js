@@ -1,5 +1,5 @@
 /**
- * Content Script — 划词助手 v3
+ * Content Script — 划词助手 v4
  *
  * 架构：ES6 Class 模块化
  *   ConfigManager     — 从 storage 加载全量配置
@@ -7,9 +7,11 @@
  *   InputBoxDetector  — 输入框/编辑器检测
  *   TriggerEngine     — 根据场景+事件决策触发方式
  *   DragController    — 面板拖拽
+ *   ResizeController  — 面板缩放（右下角拖拽手柄）
  *   AccordionCard     — 单个模型折叠卡片
  *   FloatingIcon      — 悬浮小图标
- *   PanelManager      — 面板生命周期（Pin / 拖拽 / 堆叠卡片）
+ *   PanelInstance     — 单个面板实例（三种状态：unpinned / screen-pinned / page-pinned）
+ *   PanelManager      — 面板实例管理器（单例路由、生命周期、状态分发）
  *   SelectionManager  — 全局事件监听与编排
  *   ExtensionApp      — 根节点，组合所有模块
  */
@@ -17,9 +19,8 @@
 (function () {
   'use strict';
 
-  // 防止重复注入
-  if (window.__nyaSelectionHelperV3__) return;
-  window.__nyaSelectionHelperV3__ = true;
+  if (window.__nyaSelectionHelperV4__) return;
+  window.__nyaSelectionHelperV4__ = true;
 
   const NS = 'my-ext';
 
@@ -29,6 +30,7 @@
   const SVG_CLOSE = `<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
   const SVG_CHAT = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`;
   const SVG_CHEVRON = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`;
+  const SVG_RESIZE = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 21 15 21 21 15"/><line x1="21" y1="21" x2="15" y2="15"/></svg>`;
 
   // ─── 默认配置 ─────────────────────────────────────────────────────────────
 
@@ -91,7 +93,6 @@
       });
     }
 
-    /** 读取嵌套路径，如 'triggerRules.normal.showIcon' */
     get(path) {
       return path.split('.').reduce((o, k) => o?.[k], this.data);
     }
@@ -139,21 +140,14 @@
         .map(([lang]) => lang);
     }
 
-    /**
-     * @param {string}  text
-     * @param {object}  langConfig  { zh: true, en: true, ... }
-     * @param {boolean} strict      true = 所有检测到的语种都必须在启用列表中
-     */
     static matches(text, langConfig, strict) {
       const enabled = Object.keys(langConfig).filter((k) => langConfig[k]);
-      if (enabled.length === 0) return true;          // 无过滤规则，放行
-
+      if (enabled.length === 0) return true;
       const detected = this.detect(text);
-      if (detected.length === 0) return true;          // 未知字符集，放行
-
+      if (detected.length === 0) return true;
       return strict
-        ? detected.every((l) => enabled.includes(l))  // 严格：全部匹配
-        : detected.some((l) => enabled.includes(l));   // 宽松：任一匹配
+        ? detected.every((l) => enabled.includes(l))
+        : detected.some((l) => enabled.includes(l));
     }
   }
 
@@ -171,9 +165,7 @@
       if (!element) return false;
       const tag = element.tagName?.toLowerCase();
       if (['input', 'textarea', 'select'].includes(tag)) return true;
-      // isContentEditable 在浏览器中会向下传播，子元素也返回 true
       if (element.isContentEditable) return true;
-      // 显式向上查找带有 contenteditable 属性的祖先元素（覆盖边缘情况）
       if (element.closest?.('[contenteditable="true"], [contenteditable=""]')) return true;
 
       let el = element;
@@ -198,20 +190,12 @@
       this.config = config;
     }
 
-    /**
-     * @param {'normal'|'pinned'|'insidePanel'|'standalone'} scenario
-     * @param {MouseEvent} event
-     * @param {boolean}    isDblClick
-     * @returns {'icon'|'direct'|'off'}
-     */
     evaluate(scenario, event, isDblClick = false) {
       const rules = this.config.get(`triggerRules.${scenario}`);
       if (!rules) return 'off';
 
-      // 优先级 1：双击搜索
       if (isDblClick && rules.dblclickSearch) return 'direct';
 
-      // 优先级 2：组合键触发 → 强制 direct
       if (rules.modifiers?.length > 0) {
         const hit = rules.modifiers.some((mod) => {
           if (mod === 'ctrl') return event.ctrlKey;
@@ -223,7 +207,6 @@
         if (hit) return 'direct';
       }
 
-      // 优先级 3：基础模式
       if (rules.directSearch) return 'direct';
       if (rules.showIcon) return 'icon';
       return 'off';
@@ -253,7 +236,7 @@
 
     _down(e) {
       if (e.button !== 0) return;
-      if (e.target.closest('button')) return; // 点击按钮不触发拖拽
+      if (e.target.closest('button')) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -266,7 +249,7 @@
       document.addEventListener('mousemove', this._move);
       document.addEventListener('mouseup', this._up);
       this._handle.style.cursor = 'grabbing';
-      this._panel.style.transition = 'none'; // 拖拽时禁用入场动画
+      this._panel.style.transition = 'none';
     }
 
     _move(e) {
@@ -281,18 +264,16 @@
 
       let left, top;
       if (isFixed) {
-        // fixed 定位：坐标相对视口，不含 scroll 偏移
         left = Math.max(8, Math.min(this._pl + dx, vw - pw - 8));
-        top  = Math.max(8, Math.min(this._pt + dy, vh - ph - 8));
+        top = Math.max(8, Math.min(this._pt + dy, vh - ph - 8));
       } else {
-        // absolute 定位：坐标相对文档，需加 scroll 偏移作为边界基准
         const sx = window.scrollX, sy = window.scrollY;
         left = Math.max(sx + 8, Math.min(this._pl + dx, sx + vw - pw - 8));
-        top  = Math.max(sy + 8, Math.min(this._pt + dy, sy + vh - ph - 8));
+        top = Math.max(sy + 8, Math.min(this._pt + dy, sy + vh - ph - 8));
       }
 
       this._panel.style.left = `${left}px`;
-      this._panel.style.top  = `${top}px`;
+      this._panel.style.top = `${top}px`;
     }
 
     _up() {
@@ -315,26 +296,84 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  //  ResizeController — 面板右下角缩放手柄
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  class ResizeController {
+    constructor(panelEl, handleEl, options = {}) {
+      this._panel = panelEl;
+      this._handle = handleEl;
+      this._minWidth = options.minWidth ?? 300;
+      this._minHeight = options.minHeight ?? 200;
+      this._active = false;
+      this._ox = 0; this._oy = 0;
+      this._ow = 0; this._oh = 0;
+
+      this._down = this._down.bind(this);
+      this._move = this._move.bind(this);
+      this._up = this._up.bind(this);
+
+      handleEl.addEventListener('mousedown', this._down);
+    }
+
+    _down(e) {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      this._active = true;
+      this._ox = e.clientX;
+      this._oy = e.clientY;
+      this._ow = this._panel.offsetWidth;
+      this._oh = this._panel.offsetHeight;
+
+      document.addEventListener('mousemove', this._move);
+      document.addEventListener('mouseup', this._up);
+      this._panel.style.transition = 'none';
+    }
+
+    _move(e) {
+      if (!this._active) return;
+      const dx = e.clientX - this._ox;
+      const dy = e.clientY - this._oy;
+
+      const newW = Math.max(this._minWidth, this._ow + dx);
+      const newH = Math.max(this._minHeight, this._oh + dy);
+
+      this._panel.style.width = `${newW}px`;
+      this._panel.style.height = `${newH}px`;
+    }
+
+    _up() {
+      if (!this._active) return;
+      this._active = false;
+      document.removeEventListener('mousemove', this._move);
+      document.removeEventListener('mouseup', this._up);
+      this._panel.style.transition = '';
+    }
+
+    destroy() {
+      this._handle.removeEventListener('mousedown', this._down);
+      document.removeEventListener('mousemove', this._move);
+      document.removeEventListener('mouseup', this._up);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   //  AccordionCard — 单个模型的折叠展示卡片
   // ═══════════════════════════════════════════════════════════════════════════
 
   class AccordionCard {
-    /**
-     * @param {string} modelId    'deepseek' | 'qwen'
-     * @param {string} modelLabel 显示名称
-     */
     constructor(modelId, modelLabel) {
       this.modelId = modelId;
       this.label = modelLabel;
-      // deepseek 使用 combined 模式（单次请求返回翻译+解释）
-      // qwen 使用 translate + explain 分离模式
       this._useCombined = (modelId === 'deepseek');
       this.state = {
         translate: { status: 'idle', content: '' },
-        explain:   { status: 'idle', content: '' },
-        combined:  { status: 'idle', content: '' },
+        explain: { status: 'idle', content: '' },
+        combined: { status: 'idle', content: '' },
       };
-      this.onFetch = null; // (modelId, action) => void  —— 由 PanelManager 注入
+      this.onFetch = null;
 
       this._open = true;
       this._body = null;
@@ -345,13 +384,10 @@
       this._build();
     }
 
-    // ── 构建 DOM ──────────────────────────────────────────────────────────
-
     _build() {
       this.el = document.createElement('div');
       this.el.className = `${NS}-accordion`;
 
-      // 卡片头部（点击折叠/展开）
       const hdr = document.createElement('div');
       hdr.className = `${NS}-accordion-header`;
 
@@ -376,7 +412,6 @@
       hdr.appendChild(this._chevron);
       hdr.addEventListener('click', () => this._toggle());
 
-      // 卡片主体（动画展开/折叠）
       this._body = document.createElement('div');
       this._body.className = `${NS}-accordion-body ${NS}-accordion-body--open`;
 
@@ -397,8 +432,6 @@
       this._body.classList.add(`${NS}-accordion-body--open`);
       this._chevron.classList.add(`${NS}-accordion-chevron--up`);
     }
-
-    // ── 状态更新 ──────────────────────────────────────────────────────────
 
     setLoading(action) {
       if (action in this.state) {
@@ -428,8 +461,8 @@
     reset() {
       this.state = {
         translate: { status: 'idle', content: '' },
-        explain:   { status: 'idle', content: '' },
-        combined:  { status: 'idle', content: '' },
+        explain: { status: 'idle', content: '' },
+        combined: { status: 'idle', content: '' },
       };
       this._updateDot();
       this._renderBody();
@@ -441,9 +474,9 @@
         ? [combined]
         : [translate, explain];
 
-      const hasError   = relevant.some(s => s.status === 'error');
+      const hasError = relevant.some(s => s.status === 'error');
       const hasLoading = relevant.some(s => s.status === 'loading');
-      const allResult  = relevant.every(s => s.status === 'result');
+      const allResult = relevant.every(s => s.status === 'result');
 
       if (hasError) {
         this._dot.className = `${NS}-accordion-dot ${NS}-accordion-dot--error`;
@@ -456,11 +489,8 @@
       }
     }
 
-    // ── 内容区状态机渲染 ──────────────────────────────────────────────────
-
     _renderBody() {
       this._body.innerHTML = '';
-
       if (this._useCombined) {
         this._renderBodyCombined();
       } else {
@@ -505,12 +535,10 @@
     }
 
     _renderCombinedSections(content) {
-      // 解析 ### 翻译 / ### 解释 两段
       const sectionRe = /^###\s+(.+)$/m;
       const parts = content.split(/(?=^###\s+)/m).filter(s => s.trim());
 
       if (parts.length === 0) {
-        // 无法解析结构，直接展示原文
         const section = document.createElement('div');
         section.className = `${NS}-combined-section`;
         const body = document.createElement('div');
@@ -567,8 +595,8 @@
       const { translate, explain } = this.state;
 
       const isLoading = translate.status === 'loading' || explain.status === 'loading';
-      const hasError  = translate.status === 'error'   || explain.status === 'error';
-      const allIdle   = translate.status === 'idle'    && explain.status === 'idle';
+      const hasError = translate.status === 'error' || explain.status === 'error';
+      const allIdle = translate.status === 'idle' && explain.status === 'idle';
 
       if (allIdle) {
         const hint = document.createElement('p');
@@ -681,7 +709,7 @@
   class FloatingIcon {
     constructor() {
       this.el = null;
-      this.onOpen = null; // (pos: {x, y}) => void
+      this.onOpen = null;
     }
 
     show(x, y) {
@@ -728,31 +756,32 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  Panel — 单个面板实例（拖拽、Pin、堆叠卡片、API请求）
+  //  PanelInstance — 单个面板实例
+  //  三种状态：
+  //    'unpinned'     — 默认态，点击空白处销毁
+  //    'screen-pinned' — 屏幕固定（单例），position: fixed，不随滚动
+  //    'page-pinned'   — 便利贴固定（多例），position: absolute，随滚动
   // ═══════════════════════════════════════════════════════════════════════════
 
-  class Panel {
-    constructor(panelsManager, config, id = `panel-${Date.now()}-${Math.random().toString(36).slice(2)}`) {
-      this._panelsManager = panelsManager;
+  class PanelInstance {
+    constructor(panelManager, config, id = `panel-${Date.now()}-${Math.random().toString(36).slice(2)}`) {
+      this._panelManager = panelManager;
       this._config = config;
       this.id = id;
       this.el = null;
-      this.pinMode = 'unpinned'; // 'unpinned', 'follow', 'fixed'
+      this.pinMode = 'unpinned';
       this._drag = null;
-      this._cards = {};    // { deepseek: AccordionCard, qwen: AccordionCard }
+      this._resize = null;
+      this._cards = {};
       this._preview = null;
       this._pinDropdown = null;
+      this._pinDropdownAbort = null;
       this._selectedText = '';
     }
 
     get isPinned() { return this.pinMode !== 'unpinned'; }
     get isOpen() { return !!this.el; }
 
-    /**
-     * 打开面板。若面板已打开，更新文本并重新查询。
-     * @param {string} text  选中文本
-     * @param {{x:number,y:number}} pos  页面坐标
-     */
     open(text, pos) {
       if (this.isOpen) {
         this._updateText(text);
@@ -767,7 +796,6 @@
       document.body.appendChild(this.el);
       requestAnimationFrame(() => this.el?.classList.add(`${NS}-panel--visible`));
 
-      // 根据偏好设置决定是否自动触发翻译和解释
       const pref = this._config.get('preferredAction');
       if (pref && pref !== 'none') {
         this._fetchAll();
@@ -777,29 +805,28 @@
     close() {
       if (!this.el) return;
 
-      // 立即置 null 防止重入，持有 el 引用用于后续清理
       const el = this.el;
       this.el = null;
 
-      // 清理 pin dropdown document 监听器
       this._pinDropdownAbort?.abort();
       this._pinDropdownAbort = null;
 
-      // 清理拖拽控制器
       if (this._drag) {
         this._drag.destroy();
         this._drag = null;
       }
+      if (this._resize) {
+        this._resize.destroy();
+        this._resize = null;
+      }
 
-      // 触发退场动画
       el.classList.remove(`${NS}-panel--visible`);
 
       const cleanup = () => {
         el.remove();
-        this._panelsManager?.onPanelClosed(this.id);
+        this._panelManager?.onPanelClosed(this.id);
       };
 
-      // transitionend 兜底：220ms 后强制移除（略大于 CSS transition 160ms）
       const timer = setTimeout(cleanup, 220);
       el.addEventListener('transitionend', () => {
         clearTimeout(timer);
@@ -811,18 +838,39 @@
       return !!this.el?.contains(target);
     }
 
-    // ── DOM 构建 ────────────────────────────────────────────────────────────
+    updateContent(text) {
+      this._selectedText = text;
+      if (this._preview) this._preview.textContent = `"${this._truncate(text)}"`;
+      Object.values(this._cards).forEach((c) => c.reset());
+
+      if (this.el) {
+        this.el.classList.add(`${NS}-panel--flash`);
+        setTimeout(() => this.el?.classList.remove(`${NS}-panel--flash`), 600);
+      }
+
+      const pref = this._config.get('preferredAction');
+      if (pref && pref !== 'none') {
+        this._fetchAll();
+      }
+    }
 
     _build(text) {
       const panel = document.createElement('div');
       panel.id = `${NS}-panel-${this.id}`;
       panel.className = `${NS}-panel`;
+      panel.dataset.status = this.pinMode;
 
       panel.appendChild(this._buildHeader(text));
       panel.appendChild(this._buildActionBar());
       panel.appendChild(this._buildAccordionWrap());
+      panel.appendChild(this._buildResizeHandle());
 
-      this._drag = new DragController(panel, panel.querySelector(`.${NS}-panel-header`), () => this._updateAbsolutePosition());
+      this._drag = new DragController(panel, panel.querySelector(`.${NS}-panel-header`), () => this._onDragEnd());
+      this._resize = new ResizeController(panel, panel.querySelector(`.${NS}-resize-handle`), {
+        minWidth: 300,
+        minHeight: 200,
+      });
+
       return panel;
     }
 
@@ -830,26 +878,21 @@
       const header = document.createElement('div');
       header.className = `${NS}-panel-header`;
 
-      // Logo
       const logo = document.createElement('div');
       logo.className = `${NS}-panel-logo`;
       logo.innerHTML = SVG_CHAT;
 
-      // 标题
       const title = document.createElement('span');
       title.className = `${NS}-panel-title`;
       title.textContent = 'NyaTransalte';
 
-      // 弹性间距
       const spacer = document.createElement('div');
       spacer.className = `${NS}-panel-spacer`;
 
-      // 选中文本预览
       this._preview = document.createElement('span');
       this._preview.className = `${NS}-preview`;
       this._preview.textContent = `"${this._truncate(text)}"`;
 
-      // 📌 固定下拉菜单
       const pinContainer = document.createElement('div');
       pinContainer.className = `${NS}-pin-container`;
 
@@ -862,24 +905,6 @@
       dropdown.className = `${NS}-pin-dropdown`;
       dropdown.style.display = 'none';
 
-      const optionFollow = document.createElement('button');
-      optionFollow.className = `${NS}-pin-option`;
-      optionFollow.innerHTML = '<span style="margin-right:6px">📄</span>跟随页面滚动';
-      optionFollow.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._setPinMode('follow');
-        dropdown.style.display = 'none';
-      });
-
-      const optionFixed = document.createElement('button');
-      optionFixed.className = `${NS}-pin-option`;
-      optionFixed.innerHTML = '<span style="margin-right:6px">📌</span>固定位置';
-      optionFixed.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this._setPinMode('fixed');
-        dropdown.style.display = 'none';
-      });
-
       const optionUnpin = document.createElement('button');
       optionUnpin.className = `${NS}-pin-option ${NS}-pin-option--danger`;
       optionUnpin.innerHTML = '<span style="margin-right:6px">✖</span>取消固定';
@@ -889,16 +914,33 @@
         dropdown.style.display = 'none';
       });
 
-      dropdown.appendChild(optionFollow);
-      dropdown.appendChild(optionFixed);
+      const optionScreen = document.createElement('button');
+      optionScreen.className = `${NS}-pin-option`;
+      optionScreen.innerHTML = '<span style="margin-right:6px">📌</span>固定在屏幕（常驻翻译）';
+      optionScreen.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._setPinMode('screen-pinned');
+        dropdown.style.display = 'none';
+      });
+
+      const optionPage = document.createElement('button');
+      optionPage.className = `${NS}-pin-option`;
+      optionPage.innerHTML = '<span style="margin-right:6px">📝</span>固定在页面（便利贴）';
+      optionPage.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this._setPinMode('page-pinned');
+        dropdown.style.display = 'none';
+      });
+
       dropdown.appendChild(optionUnpin);
+      dropdown.appendChild(optionScreen);
+      dropdown.appendChild(optionPage);
 
       btnPin.addEventListener('click', (e) => {
         e.stopPropagation();
         dropdown.style.display = dropdown.style.display === 'none' ? 'block' : 'none';
       });
 
-      // 点击其他地方关闭下拉菜单（绑定 AbortController，close() 时自动移除）
       const ac = new AbortController();
       this._pinDropdownAbort = ac;
       document.addEventListener('click', (e) => {
@@ -911,7 +953,6 @@
       pinContainer.appendChild(dropdown);
       this._pinDropdown = dropdown;
 
-      // ❌ 关闭按钮
       const btnClose = document.createElement('button');
       btnClose.className = `${NS}-header-btn`;
       btnClose.title = '关闭';
@@ -929,44 +970,6 @@
       header.appendChild(btnClose);
 
       return header;
-    }
-
-    _setPinMode(mode) {
-      const oldMode = this.pinMode;
-      this.pinMode = mode;
-
-      // 更新按钮视觉状态
-      const btnPin = this.el?.querySelector(`.${NS}-header-btn`);
-      if (btnPin) {
-        btnPin.classList.toggle(`${NS}-header-btn--active`, mode !== 'unpinned');
-        if (mode === 'follow') {
-          btnPin.title = '跟随页面滚动';
-        } else if (mode === 'fixed') {
-          btnPin.title = '固定位置';
-        } else {
-          btnPin.title = '固定面板';
-        }
-      }
-
-      // 根据模式应用行为
-      if (mode === 'follow') {
-        this._enableFollowScroll();
-      } else if (mode === 'fixed') {
-        this._enableFixedPosition();
-      } else {
-        this._disablePin(oldMode);
-      }
-
-      // 通知管理器状态变化
-      if (this._panelsManager) {
-        if (mode !== 'unpinned' && oldMode === 'unpinned') {
-          // 从未钉住变为钉住
-          this._panelsManager.onPanelPinned(this.id);
-        } else if (mode === 'unpinned' && oldMode !== 'unpinned') {
-          // 从钉住变为未钉住
-          this._panelsManager.onPanelUnpinned(this.id);
-        }
-      }
     }
 
     _buildActionBar() {
@@ -994,12 +997,88 @@
       return wrap;
     }
 
-    // ── API 请求 ────────────────────────────────────────────────────────────
+    _buildResizeHandle() {
+      const handle = document.createElement('div');
+      handle.className = `${NS}-resize-handle`;
+      handle.innerHTML = SVG_RESIZE;
+      handle.title = '拖拽缩放面板';
+      return handle;
+    }
+
+    _setPinMode(mode) {
+      const oldMode = this.pinMode;
+      this.pinMode = mode;
+
+      if (this.el) {
+        this.el.dataset.status = mode;
+      }
+
+      const btnPin = this.el?.querySelector(`.${NS}-header-btn`);
+      if (btnPin) {
+        btnPin.classList.toggle(`${NS}-header-btn--active`, mode !== 'unpinned');
+        if (mode === 'screen-pinned') {
+          btnPin.title = '固定在屏幕（常驻翻译）';
+        } else if (mode === 'page-pinned') {
+          btnPin.title = '固定在页面（便利贴）';
+        } else {
+          btnPin.title = '固定面板';
+        }
+      }
+
+      if (mode === 'screen-pinned') {
+        this._applyScreenPinned();
+      } else if (mode === 'page-pinned') {
+        this._applyPagePinned();
+      } else {
+        this._applyUnpinned(oldMode);
+      }
+
+      if (this._panelManager) {
+        if (mode !== 'unpinned' && oldMode === 'unpinned') {
+          this._panelManager.onPanelPinned(this.id, mode);
+        } else if (mode === 'unpinned' && oldMode !== 'unpinned') {
+          this._panelManager.onPanelUnpinned(this.id);
+        } else if (oldMode !== 'unpinned' && mode !== 'unpinned' && oldMode !== mode) {
+          this._panelManager.onPinModeChanged(this.id, oldMode, mode);
+        }
+      }
+    }
+
+    _applyScreenPinned() {
+      if (!this.el) return;
+      const rect = this.el.getBoundingClientRect();
+      this.el.style.position = 'fixed';
+      this.el.style.top = `${rect.top}px`;
+      this.el.style.left = `${rect.left}px`;
+    }
+
+    _applyPagePinned() {
+      if (!this.el) return;
+      const rect = this.el.getBoundingClientRect();
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+      this.el.style.position = 'absolute';
+      this.el.style.left = `${rect.left + scrollX}px`;
+      this.el.style.top = `${rect.top + scrollY}px`;
+    }
+
+    _applyUnpinned(oldMode) {
+      if (!this.el) return;
+      const rect = this.el.getBoundingClientRect();
+      const scrollX = window.scrollX;
+      const scrollY = window.scrollY;
+
+      this.el.style.position = 'absolute';
+      this.el.style.left = `${rect.left + scrollX}px`;
+      this.el.style.top = `${rect.top + scrollY}px`;
+    }
+
+    _onDragEnd() {
+      // 拖拽结束后无需特殊处理，位置已由 DragController 更新
+    }
 
     _fetchAll() {
-      // deepseek：combined 双效合一（单次请求返回翻译+解释）
       this._fetchModel('deepseek', 'combined');
-      // qwen：分两次请求，保留原有逻辑
       this._fetchModel('qwen', 'translate');
       this._fetchModel('qwen', 'explain');
     }
@@ -1012,7 +1091,7 @@
       chrome.runtime.sendMessage(
         { action, text: this._selectedText, model: modelId },
         (response) => {
-          if (!this.isOpen) return; // 面板已关闭，丢弃响应
+          if (!this.isOpen) return;
           if (chrome.runtime.lastError) {
             card.setError(action, '无法连接扩展后台，请在 chrome://extensions 页面重新加载扩展。');
           } else if (response?.success) {
@@ -1023,8 +1102,6 @@
         }
       );
     }
-
-    // ── 工具方法 ─────────────────────────────────────────────────────────────
 
     _updateText(text) {
       this._selectedText = text;
@@ -1048,102 +1125,183 @@
       return { left, top };
     }
 
-    _enableFollowScroll() {
-      // 在跟随滚动模式下，面板会随着页面滚动而移动
-      if (this.el) {
-        // 确保面板使用绝对定位
-        this.el.style.position = 'absolute';
-
-        // 获取当前视口位置和滚动偏移
-        const rect = this.el.getBoundingClientRect();
-        const scrollX = window.scrollX;
-        const scrollY = window.scrollY;
-
-        // 计算相对于文档的位置（吸附页面）
-        const absoluteLeft = rect.left + scrollX;
-        const absoluteTop = rect.top + scrollY;
-        this.el.style.left = `${absoluteLeft}px`;
-        this.el.style.top = `${absoluteTop}px`;
-
-        // 更新保存的绝对位置
-        this._updateAbsolutePosition();
-      }
-    }
-
-    _enableFixedPosition() {
-      // 在固定位置模式下，面板保持在视口中的固定位置
-      if (this.el) {
-        const rect = this.el.getBoundingClientRect();
-        this.el.style.position = 'fixed';
-        this.el.style.top = `${rect.top}px`;
-        this.el.style.left = `${rect.left}px`;
-        // 更新保存的绝对位置
-        this._updateAbsolutePosition();
-      }
-    }
-
-    _disablePin(oldMode) {
-      // 取消固定，恢复未钉住状态（可拖拽的绝对定位面板）
-      if (!this.el) return;
-
-      const rect = this.el.getBoundingClientRect();
-      const scrollX = window.scrollX;
-      const scrollY = window.scrollY;
-
-      // 根据之前的钉住模式转换坐标
-      if (oldMode === 'fixed') {
-        // 从固定定位转换为绝对定位：计算相对于文档的位置
-        this.el.style.position = 'absolute';
-        this.el.style.left = `${rect.left + scrollX}px`;
-        this.el.style.top = `${rect.top + scrollY}px`;
-      } else if (oldMode === 'follow') {
-        // 跟随滚动模式已经是绝对定位，保持当前位置
-        this.el.style.position = 'absolute';
-        // 如果保存了绝对位置，使用它们
-        if (this._absoluteLeft !== undefined && this._absoluteTop !== undefined) {
-          this.el.style.left = `${this._absoluteLeft}px`;
-          this.el.style.top = `${this._absoluteTop}px`;
-        }
-      } else {
-        // 从未钉住状态调用（不应发生），确保为绝对定位
-        this.el.style.position = 'absolute';
-      }
-      // 更新保存的绝对位置
-      this._updateAbsolutePosition();
-    }
-
-    _updatePanelPositionOnScroll() {
-      // 跟随滚动模式下的位置更新 - 确保面板保持在文档中的绝对位置
-      if (this.pinMode === 'follow' && this.el && this._absoluteTop !== undefined) {
-        // 如果保存了绝对位置，使用它们（确保位置准确）
-        this.el.style.top = `${this._absoluteTop}px`;
-        if (this._absoluteLeft !== undefined) {
-          this.el.style.left = `${this._absoluteLeft}px`;
-        }
-      }
-    }
-
-    _updateAbsolutePosition() {
-      // 更新保存的绝对位置（相对于文档）
-      if (!this.el) return;
-      const left = parseInt(this.el.style.left, 10);
-      const top = parseInt(this.el.style.top, 10);
-      if (isNaN(left) || isNaN(top)) return;
-
-      // 根据当前定位模式调整
-      if (this.pinMode === 'fixed') {
-        // 固定定位：left/top 是相对于视口的，转换为文档坐标
-        this._absoluteLeft = left + window.scrollX;
-        this._absoluteTop = top + window.scrollY;
-      } else {
-        // 绝对定位或跟随模式：left/top 已经是文档坐标
-        this._absoluteLeft = left;
-        this._absoluteTop = top;
-      }
-    }
-
     _truncate(text, len = 38) {
       return text.length > len ? `${text.slice(0, len)}…` : text;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  PanelManager — 面板实例管理器（单例）
+  //  职责：
+  //    1. 管理所有面板实例的生命周期
+  //    2. 保证 screen-pinned 模式全局单例
+  //    3. 提供路由查询接口：getScreenPinnedPanel()
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  class PanelManager {
+    constructor(config) {
+      this._config = config;
+      this._panels = new Map();
+      this._activePanel = null;
+      this._screenPinnedPanelId = null;
+      this._pagePinnedPanelIds = new Set();
+    }
+
+    get activePanel() {
+      return this._activePanel;
+    }
+
+    get screenPinnedPanel() {
+      if (!this._screenPinnedPanelId) return null;
+      return this._panels.get(this._screenPinnedPanelId) || null;
+    }
+
+    get pagePinnedPanels() {
+      return Array.from(this._pagePinnedPanelIds)
+        .map(id => this._panels.get(id))
+        .filter(Boolean);
+    }
+
+    get allPanels() {
+      return Array.from(this._panels.values());
+    }
+
+    hasScreenPinnedPanel() {
+      return !!this.screenPinnedPanel;
+    }
+
+    createPanel(text, position, mode = 'unpinned') {
+      if (mode === 'screen-pinned' && this.hasScreenPinnedPanel()) {
+        console.warn('[PanelManager] screen-pinned 已存在，拒绝创建新实例');
+        return this.screenPinnedPanel;
+      }
+
+      if (mode === 'unpinned' && this._activePanel) {
+        this._activePanel.close();
+      }
+
+      const panel = new PanelInstance(this, this._config);
+      panel._selectedText = text;
+      this._panels.set(panel.id, panel);
+
+      if (mode === 'unpinned') {
+        this._activePanel = panel;
+      } else if (mode === 'screen-pinned') {
+        this._screenPinnedPanelId = panel.id;
+      } else if (mode === 'page-pinned') {
+        this._pagePinnedPanelIds.add(panel.id);
+      }
+
+      panel.open(text, position);
+      return panel;
+    }
+
+    routeToScreenPinned(text) {
+      const panel = this.screenPinnedPanel;
+      if (!panel) return null;
+      panel.updateContent(text);
+      return panel;
+    }
+
+    onPanelPinned(panelId, mode) {
+      const panel = this._panels.get(panelId);
+      if (!panel) return;
+
+      if (this._activePanel?.id === panelId) {
+        this._activePanel = null;
+      }
+
+      if (mode === 'screen-pinned') {
+        if (this._screenPinnedPanelId && this._screenPinnedPanelId !== panelId) {
+          const oldPanel = this._panels.get(this._screenPinnedPanelId);
+          if (oldPanel) {
+            oldPanel._setPinMode('unpinned');
+          }
+        }
+        this._screenPinnedPanelId = panelId;
+      } else if (mode === 'page-pinned') {
+        this._pagePinnedPanelIds.add(panelId);
+      }
+    }
+
+    onPanelUnpinned(panelId) {
+      const panel = this._panels.get(panelId);
+      if (!panel) return;
+
+      if (this._screenPinnedPanelId === panelId) {
+        this._screenPinnedPanelId = null;
+      }
+      this._pagePinnedPanelIds.delete(panelId);
+
+      if (!this._activePanel) {
+        this._activePanel = panel;
+      } else {
+        panel.close();
+      }
+
+      panel.pinMode = 'unpinned';
+    }
+
+    onPinModeChanged(panelId, oldMode, newMode) {
+      if (oldMode === 'screen-pinned') {
+        this._screenPinnedPanelId = null;
+      }
+      if (newMode === 'screen-pinned') {
+        if (this._screenPinnedPanelId && this._screenPinnedPanelId !== panelId) {
+          const oldPanel = this._panels.get(this._screenPinnedPanelId);
+          if (oldPanel) {
+            oldPanel._setPinMode('unpinned');
+          }
+        }
+        this._screenPinnedPanelId = panelId;
+      }
+
+      if (oldMode === 'page-pinned') {
+        this._pagePinnedPanelIds.delete(panelId);
+      }
+      if (newMode === 'page-pinned') {
+        this._pagePinnedPanelIds.add(panelId);
+      }
+    }
+
+    onPanelClosed(panelId) {
+      const panel = this._panels.get(panelId);
+      if (!panel) return;
+
+      this._panels.delete(panelId);
+
+      if (this._screenPinnedPanelId === panelId) {
+        this._screenPinnedPanelId = null;
+      }
+      this._pagePinnedPanelIds.delete(panelId);
+
+      if (this._activePanel?.id === panelId) {
+        this._activePanel = null;
+      }
+    }
+
+    contains(element) {
+      if (!element) return false;
+      for (const panel of this._panels.values()) {
+        if (panel.el && panel.el.contains(element)) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    closeAll() {
+      for (const panel of this._panels.values()) {
+        panel.close();
+      }
+    }
+
+    closeUnpinned() {
+      for (const panel of this._panels.values()) {
+        if (panel.pinMode === 'unpinned') {
+          panel.close();
+        }
+      }
     }
   }
 
@@ -1177,22 +1335,15 @@
       window.addEventListener('scroll', this._onScroll, { passive: true });
     }
 
-    // ── mousedown：记录 mousedown 是否落在 widget 上 ──────────────────────
-
     _onDown(e) {
       this._downOnIcon = this._app.icon.contains(e.target);
       this._downOnPanel = this._app.panels.contains(e.target);
     }
 
-    // ── mouseup：核心拦截器 + 触发器 ──────────────────────────────────────
     _onUp(e) {
-      // 检查点击是否发生在面板内部，如果是则立即返回，不触发新的划词逻辑
       if (e.target.closest('.my-ext-panel')) return;
-
-      // 若 mousedown 落在小图标上，由图标自身的 click 处理，此处忽略
       if (this._downOnIcon) return;
 
-      // 用 10ms 延迟等待浏览器更新 selection 对象
       const capturedE = {
         pageX: e.pageX, pageY: e.pageY,
         ctrlKey: e.ctrlKey, altKey: e.altKey,
@@ -1205,82 +1356,67 @@
         const text = sel?.toString().trim() ?? '';
 
         if (text.length < 1 || text.length > 500) {
-          // 没有有效选中文本
           if (!this._app.panels.activePanel?.isOpen) this._app.icon.hide();
           return;
         }
 
-        // ── 拦截器 1：输入框/代码编辑器检测 ──
         if (this._app.config.get('disableInInputs')) {
           const anchor = sel.anchorNode?.parentElement;
           const target = capturedE.target;
           if (InputBoxDetector.isInside(anchor) || InputBoxDetector.isInside(target)) return;
         }
 
-        // ── 拦截器 2：语言匹配检测 ──
         const langCfg = this._app.config.get('languages');
         const strict = this._app.config.get('strictLanguageMatch');
         if (!LanguageDetector.matches(text, langCfg, strict)) return;
 
         this._app.selectedText = text;
 
-        // ── 判断场景 ──
         let scenario;
         if (this._downOnPanel) {
           scenario = 'insidePanel';
-        } else if (this._app.panels.pinnedPanels.length > 0) {
+        } else if (this._app.panels.pagePinnedPanels.length > 0 || this._app.panels.hasScreenPinnedPanel()) {
           scenario = 'pinned';
         } else {
           scenario = 'normal';
         }
 
-        // ── 触发器：根据场景+规则决策 ──
         const action = this._app.trigger.evaluate(scenario, capturedE, this._isDblClick);
 
         if (action === 'direct') {
-          // 始终先隐藏图标，直接搜索不经过小图标阶段
           this._app.icon.hide();
 
-          const activePanel = this._app.panels.activePanel;
-
-          if (activePanel?.isOpen) {
-            // 已有活动面板：原地更新文本，发起新请求，不移动面板位置
-            activePanel._updateText(text);
+          if (this._app.panels.hasScreenPinnedPanel()) {
+            this._app.panels.routeToScreenPinned(text);
           } else {
-            // 无活动面板：创建新面板（已有 pinned 面板时也创建新的）
-            this._app.panels.createActivePanel(text, { x: capturedE.pageX, y: capturedE.pageY });
+            const activePanel = this._app.panels.activePanel;
+            if (activePanel?.isOpen) {
+              activePanel._updateText(text);
+            } else {
+              this._app.panels.createPanel(text, { x: capturedE.pageX, y: capturedE.pageY }, 'unpinned');
+            }
           }
         } else if (action === 'icon') {
           if (!this._app.panels.activePanel?.isOpen) {
             this._app.icon.show(capturedE.pageX, capturedE.pageY);
           }
         }
-        // action === 'off' → 什么都不做
       }, 10);
     }
 
-    // ── click：点击空白处关闭 ──────────────────────────────────────────────
-
     _onClick(e) {
-      // 如果点击在面板内（包括已固定的面板），不关闭
       if (this._app.panels.contains(e.target)) return;
-
-      // 关闭所有未钉住的面板
       this._app.panels.closeUnpinned();
       if (!this._app.icon.contains(e.target)) {
         this._app.icon.hide();
       }
     }
 
-    // ── dblclick：标记双击状态 ────────────────────────────────────────────
-
     _onDbl() {
       this._isDblClick = true;
       clearTimeout(this._dblTimer);
       this._dblTimer = setTimeout(() => { this._isDblClick = false; }, 400);
     }
-
-    // ── keydown：Esc 关闭 ─────────────────────────────────────────────────
 
     _onKey(e) {
       if (e.key === 'Escape') {
@@ -1289,27 +1425,14 @@
       }
     }
 
-    // ── scroll：处理滚动事件 ──────────────────────────────────────────────
-
     _onScroll() {
       this._app.icon.hide();
-
-      // 滚动时关闭所有未钉住的面板
       this._app.panels.closeUnpinned();
-
-      // 更新所有跟随滚动模式的面板位置
-      for (const panel of this._app.panels.pinnedPanels) {
-        if (panel.pinMode === 'follow') {
-          panel._updatePanelPositionOnScroll();
-        }
-      }
     }
-
-    // ── mousemove：悬浮取词（hover select） ──────────────────────────────
 
     _onMove(e) {
       if (!this._app.config.get('triggerRules.normal.hoverSelect')) return;
-      if (this._app.panel.isOpen) return;
+      if (this._app.panels.activePanel?.isOpen) return;
 
       clearTimeout(this._hoverTimer);
       this._hoverTimer = setTimeout(() => {
@@ -1331,150 +1454,6 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  PanelsManager — 管理所有面板实例
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  class PanelsManager {
-    constructor(config) {
-      this._config = config;
-      this._panels = new Map(); // id -> panel
-      this._activePanel = null; // 未钉住的活动面板
-      this._pinnedPanels = new Set(); // 已钉住的面板ID集合
-    }
-
-    // 获取活动面板（未钉住的）
-    get activePanel() {
-      return this._activePanel;
-    }
-
-    // 获取所有已钉住的面板
-    get pinnedPanels() {
-      return Array.from(this._pinnedPanels).map(id => this._panels.get(id)).filter(Boolean);
-    }
-
-    // 获取所有面板
-    get allPanels() {
-      return Array.from(this._panels.values());
-    }
-
-    // 创建新的活动面板
-    createActivePanel(text, position) {
-      // 如果有现有的活动面板，关闭它
-      if (this._activePanel) {
-        this._activePanel.close();
-      }
-
-      // 创建新面板
-      const panel = new Panel(this, this._config);
-      panel._selectedText = text;
-
-      // 存储面板
-      this._panels.set(panel.id, panel);
-      this._activePanel = panel;
-
-      // 打开面板
-      panel.open(text, position);
-
-      return panel;
-    }
-
-    // 更新活动面板的内容
-    updateActivePanel(text, position) {
-      if (!this._activePanel) {
-        return this.createActivePanel(text, position);
-      }
-
-      // 如果活动面板已经打开，更新其内容
-      this._activePanel._updateText(text);
-
-      // 如果需要，重新定位面板
-      if (position) {
-        const clamped = this._activePanel._clamp(position.x, position.y);
-        this._activePanel.el.style.left = `${clamped.left}px`;
-        this._activePanel.el.style.top = `${clamped.top}px`;
-      }
-
-      return this._activePanel;
-    }
-
-    // 面板被钉住时的回调
-    onPanelPinned(panelId) {
-      const panel = this._panels.get(panelId);
-      if (!panel) return;
-
-      // 从活动面板移除（_setPinMode 已设置 panel.pinMode，此处不再重复）
-      if (this._activePanel?.id === panelId) {
-        this._activePanel = null;
-      }
-
-      // 添加到钉住面板集合
-      this._pinnedPanels.add(panelId);
-    }
-
-    // 面板被取消钉住时的回调
-    onPanelUnpinned(panelId) {
-      const panel = this._panels.get(panelId);
-      if (!panel) return;
-
-      // 从钉住面板集合中移除
-      this._pinnedPanels.delete(panelId);
-
-      // 如果当前没有活动面板，设置为活动面板
-      if (!this._activePanel) {
-        this._activePanel = panel;
-      } else {
-        // 否则关闭面板（因为只能有一个活动面板）
-        panel.close();
-      }
-
-      // 重置钉住模式
-      panel.pinMode = 'unpinned';
-    }
-
-    // 面板关闭时的回调
-    onPanelClosed(panelId) {
-      const panel = this._panels.get(panelId);
-      if (!panel) return;
-
-      // 从各种列表中移除
-      this._panels.delete(panelId);
-      this._pinnedPanels.delete(panelId);
-
-      if (this._activePanel?.id === panelId) {
-        this._activePanel = null;
-      }
-    }
-
-    // 检查面板是否包含某个元素
-    contains(element) {
-      if (!element) return false;
-
-      for (const panel of this._panels.values()) {
-        if (panel.el && panel.el.contains(element)) {
-          return true;
-        }
-      }
-      return false;
-    }
-
-    // 关闭所有面板
-    closeAll() {
-      for (const panel of this._panels.values()) {
-        panel.close();
-      }
-    }
-
-    // 关闭所有未钉住的面板
-    closeUnpinned() {
-      for (const panel of this._panels.values()) {
-        if (!this._pinnedPanels.has(panel.id)) {
-          panel.close();
-        }
-      }
-    }
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
   //  ExtensionApp — 根节点，组合所有模块
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1483,11 +1462,10 @@
       this.selectedText = '';
       this.config = new ConfigManager();
       this.icon = new FloatingIcon();
-      this.panels = new PanelsManager(this.config);
+      this.panels = new PanelManager(this.config);
       this.trigger = null;
       this.selection = null;
 
-      // 向后兼容性：保持 panel 属性指向活动面板
       Object.defineProperty(this, 'panel', {
         get() {
           return this.panels.activePanel;
@@ -1495,7 +1473,7 @@
       });
 
       this.icon.onOpen = (pos) => {
-        this.panels.createActivePanel(this.selectedText, pos);
+        this.panels.createPanel(this.selectedText, pos, 'unpinned');
       };
     }
 
@@ -1503,7 +1481,7 @@
       await this.config.load();
       this.trigger = new TriggerEngine(this.config);
       this.selection = new SelectionManager(this);
-      console.debug('[划词助手 v3] 初始化完成。');
+      console.debug('[划词助手 v4] 初始化完成 — 面板实例管理器已启用。');
     }
   }
 

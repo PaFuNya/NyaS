@@ -794,3 +794,65 @@
   word-break: break-word;
   box-sizing: border-box;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   缩放手柄（右下角）
+   ═══════════════════════════════════════════════════════════════════════════ */
+.my-ext-resize-handle {
+  all: unset;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: nwse-resize;
+  color: var(--ext-text-muted);
+  opacity: 0.4;
+  transition: opacity var(--ext-transition), color var(--ext-transition);
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+.my-ext-resize-handle:hover {
+  opacity: 1;
+  color: var(--ext-accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   面板内容更新闪烁动画（告知用户内容已更新）
+   ═══════════════════════════════════════════════════════════════════════════ */
+@keyframes my-ext-flash {
+  0% {
+    box-shadow: var(--ext-shadow-panel);
+  }
+
+  30% {
+    box-shadow: 0 0 0 3px rgba(91, 106, 240, 0.35), var(--ext-shadow-panel);
+  }
+
+  100% {
+    box-shadow: var(--ext-shadow-panel);
+  }
+}
+
+.my-ext-panel--flash {
+  animation: my-ext-flash 0.6s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   面板状态指示（通过 data-status 属性区分）
+   ═══════════════════════════════════════════════════════════════════════════ */
+.my-ext-panel[data-status="screen-pinned"] {
+  position: fixed;
+}
+
+.my-ext-panel[data-status="page-pinned"] {
+  position: absolute;
+}
+
+.my-ext-panel[data-status="unpinned"] {
+  position: absolute;
+}
