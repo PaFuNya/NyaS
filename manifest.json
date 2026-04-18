@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "划词助手 - 翻译与术语解释",
+  "name": "NyaTranslate-喵译",
   "version": "2.0.0",
   "description": "划选网页文字，通过 DeepSeek 或通义千问即时获取翻译和专业术语解释。",
   "icons": {
@@ -14,7 +14,7 @@
       "16": "icons/icon16.png",
       "48": "icons/icon48.png"
     },
-    "default_title": "划词助手"
+    "default_title": "NyaTranslate-喵译"
   },
   "permissions": [
     "storage"
@@ -29,9 +29,15 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
-      "css": ["style.css"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "style.css"
+      ],
       "run_at": "document_idle"
     }
   ]
