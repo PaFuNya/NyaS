@@ -1,4 +1,4 @@
-# 划词助手 Chrome 扩展
+# NyaTranslate Chrome 扩展
 
 一个基于 Manifest V3 的 Chrome 扩展，在用户划词选中文本后弹出悬浮面板，提供**翻译**和**专业术语解释**功能。
 
@@ -19,15 +19,7 @@ selection-helper/
 
 ## 快速开始
 
-### 1. 生成临时图标
-
-在 Chrome 任意页面打开 DevTools（F12），切换到 **Console** 标签，
-运行 `generate-icons.js` 文件注释中提供的 JS 代码，会自动下载三个 PNG 图标。
-将下载好的文件放入 `icons/` 目录。
-
-> **提示**：正式发布时请替换为你自己的设计图标。
-
-### 2. 加载扩展到 Chrome
+### 加载扩展到 Chrome
 
 1. 打开 Chrome，地址栏输入 `chrome://extensions/`
 2. 右上角开启**开发者模式**
