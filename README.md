@@ -4,19 +4,9 @@
   <strong>AI驱动的翻译与术语解释Chrome扩展 | 猫娘主题 · 精美动画 · 优雅体验</strong>
 </p>
 
-<p align="center">
-  <a href="#特性">特性</a> •
-  <a href="#安装">安装</a> •
-  <a href="#使用指南">使用指南</a> •
-  <a href="#配置">配置</a> •
-  <a href="#开发">开发</a> •
-  <a href="#贡献">贡献</a>
-</p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-v2.0.0-blue" alt="版本">
   <img src="https://img.shields.io/badge/Manifest-V3-green" alt="Manifest V3">
-  <img src="https://img.shields.io/badge/语言-中文-red" alt="语言">
   <img src="https://img.shields.io/badge/许可-MIT-yellow" alt="许可证">
 </p>
 
@@ -29,29 +19,8 @@
 - **智能划词翻译**：在任意网页划选文字，即刻获得翻译结果
 - **专业术语解释**：获取选中文档的详细解释和上下文含义
 - **双AI引擎支持**：DeepSeek 与 通义千问 双重支持，智能切换
-- **猫娘主题界面**：蓝白色渐变主题，所有文本都添加了可爱的"喵~"后缀
-- **精美动画效果**：8种CSS动画，带来流畅的视觉体验
-- **完全可配置**：多种触发方式、语言匹配、个性化设置
 
 ## 🚀 特性
-
-### 🎨 **视觉体验**
-- **蓝白色渐变主题**：清新优雅的色彩搭配，护眼舒适
-- **毛玻璃效果卡片**：现代感十足的 UI 设计
-- **居中响应式布局**：完美适配各种屏幕尺寸
-- **猫娘化文本**：所有提示和说明都添加了"喵~"后缀，萌感十足
-
-### 🎭 **动画效果**
-| 动画名称 | 效果描述 | 应用位置 |
-|---------|---------|---------|
-| `slideInLeft` | 侧边栏滑入 | 左侧导航栏 |
-| `pulse` | 脉冲发光 | Logo图标 |
-| `cardFadeIn` | 卡片淡入 | 设置卡片 |
-| `titleGlow` | 标题发光 | Section标题 |
-| `bounce` | 弹跳效果 | Toast通知图标 |
-| `float` | 浮动动画 | 关于页Logo |
-| `checkPop` | 复选框弹跳 | 勾选框 |
-| `shimmer` | 光泽扫过 | 提示卡片 |
 
 ### ⚡ **核心功能**
 - **多种触发方式**：图标点击、双击文字、组合键等
