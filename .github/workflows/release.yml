@@ -1,0 +1,60 @@
+name: Build & Release 喵~
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: 构建扩展喵~
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 检出代码喵~
+        uses: actions/checkout@v4
+
+      - name: 获取版本号喵~
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: 构建扩展包喵~
+        run: |
+          # 创建发布目录
+          mkdir -p release
+          
+          # 打包扩展（排除不必要的文件）
+          zip -r "release/NyaTranslate-${{ steps.version.outputs.VERSION }}.zip" \
+            manifest.json \
+            background.js \
+            content.js \
+            popup.html \
+            popup.js \
+            options.html \
+            options.js \
+            options.css \
+            style.css \
+            icons/ \
+            -x "*.md" \
+            -x ".github/*" \
+            -x "generate-icons.js"
+
+      - name: 上传到Release喵~
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/NyaTranslate-${{ steps.version.outputs.VERSION }}.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 上传构建产物喵~
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: NyaTranslate-${{ steps.version.outputs.VERSION }}
+          path: release/
