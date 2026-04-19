@@ -38,8 +38,8 @@
 ## 📸 截图展示
 
 ### 设置页面
-![设置页面](<img width="1223" height="886" alt="image" src="https://github.com/user-attachments/assets/9cdafaf5-ce12-4670-88d4-99cabc4b50fb" />
-)
+<img width="1223" height="886" alt="image" src="https://github.com/user-attachments/assets/272d2534-c610-4251-9d3d-55e87fc98438" />
+
 *蓝白色主题，侧边栏滑入动画，卡片淡入效果喵~*
 
 ### 划词翻译
