@@ -188,7 +188,6 @@ Permission is hereby granted, free of charge, to any person obtaining a copy
 ...
 ```
 
-- **问题反馈**：[GitHub Issues](https://github.com/your-username/NyaTranslate/issues)
 - **功能建议**：在 Issues 中提出
 - **代码贡献**：提交 Pull Request
 
