@@ -1466,6 +1466,7 @@
       this._isDblClick = false;
       this._dblTimer = null;
       this._hoverTimer = null;
+      this._spaObserver = null;
 
       this._onDown = this._onDown.bind(this);
       this._onUp = this._onUp.bind(this);
@@ -1475,13 +1476,58 @@
       this._onScroll = this._onScroll.bind(this);
       this._onMove = this._onMove.bind(this);
 
-      document.addEventListener('mousedown', this._onDown);
-      document.addEventListener('mouseup', this._onUp);
-      document.addEventListener('click', this._onClick);
-      document.addEventListener('dblclick', this._onDbl);
-      document.addEventListener('keydown', this._onKey);
+      this._setup();
+      this._setupSpaWatcher();
+    }
+
+    _setup() {
+      // 捕获阶段注册，确保在目标页脚本调用 stopPropagation 前拿到事件
+      document.addEventListener('mousedown', this._onDown,  true);
+      document.addEventListener('mouseup',   this._onUp,    true);
+      document.addEventListener('click',     this._onClick, true);
+      document.addEventListener('dblclick',  this._onDbl,   true);
+      document.addEventListener('keydown',   this._onKey,   true);
       document.addEventListener('mousemove', this._onMove, { passive: true });
       window.addEventListener('scroll', this._onScroll, { passive: true });
+    }
+
+    _teardown() {
+      document.removeEventListener('mousedown', this._onDown,  true);
+      document.removeEventListener('mouseup',   this._onUp,    true);
+      document.removeEventListener('click',     this._onClick, true);
+      document.removeEventListener('dblclick',  this._onDbl,   true);
+      document.removeEventListener('keydown',   this._onKey,   true);
+      document.removeEventListener('mousemove', this._onMove);
+      window.removeEventListener('scroll',      this._onScroll);
+    }
+
+    // SPA 路由存活：popstate（History API）+ MutationObserver（Turbo/Pjax 替换 body）
+    _setupSpaWatcher() {
+      window.addEventListener('popstate', () => this._reattach());
+
+      // subtree:false 只看 body 直接子节点批量替换，避免过度触发
+      this._spaObserver = new MutationObserver(() => this._reattach());
+      this._spaObserver.observe(document.body, { childList: true, subtree: false });
+    }
+
+    _reattach() {
+      this._teardown();
+      this._setup();
+    }
+
+    // 取词：优先标准 API，穿透 Shadow DOM 兜底
+    _getSelectionText() {
+      const std = window.getSelection()?.toString().trim();
+      if (std) return std;
+
+      // 递归穿透持有焦点的 Shadow Root
+      let root = document.activeElement?.shadowRoot;
+      while (root) {
+        const inner = root.getSelection?.()?.toString().trim();
+        if (inner) return inner;
+        root = root.activeElement?.shadowRoot ?? null;
+      }
+      return '';
     }
 
     _onDown(e) {
@@ -1501,8 +1547,8 @@
       };
 
       setTimeout(() => {
-        const sel = window.getSelection();
-        const text = sel?.toString().trim() ?? '';
+        const sel  = window.getSelection();
+        const text = this._getSelectionText();
 
         if (text.length < 1 || text.length > 500) {
           if (!this._app.panels.activePanel?.isOpen) this._app.icon.hide();
@@ -1510,7 +1556,7 @@
         }
 
         if (this._app.config.get('disableInInputs')) {
-          const anchor = sel.anchorNode?.parentElement;
+          const anchor = sel?.anchorNode?.parentElement;
           const target = capturedE.target;
           if (InputBoxDetector.isInside(anchor) || InputBoxDetector.isInside(target)) return;
         }
@@ -1816,15 +1862,21 @@
     }
 
     mount() {
+      const dpr = window.devicePixelRatio || 1;
+      this._dpr = dpr;
+
       const canvas  = document.createElement('canvas');
-      canvas.width  = window.innerWidth;
-      canvas.height = window.innerHeight;
+      // 物理像素尺寸，对齐 captureVisibleTab 截图的位图分辨率
+      canvas.width  = Math.round(window.innerWidth  * dpr);
+      canvas.height = Math.round(window.innerHeight * dpr);
       canvas.style.cssText = [
         'position:fixed',
         'inset:0',
         'z-index:2147483647',
         'cursor:crosshair',
         'display:block',
+        `width:${window.innerWidth}px`,
+        `height:${window.innerHeight}px`,
       ].join(';');
 
       this._canvas = canvas;
@@ -1878,8 +1930,9 @@
           ctx.fill();
         });
 
-        // 选区尺寸标注
-        const sizeLabel = `${Math.round(sw)} × ${Math.round(sh)}`;
+        // 选区尺寸标注（转回 CSS 像素显示，对用户友好）
+        const dpr = this._dpr || 1;
+        const sizeLabel = `${Math.round(sw / dpr)} × ${Math.round(sh / dpr)}`;
         ctx.font      = 'bold 11px -apple-system,sans-serif';
         ctx.fillStyle = 'rgba(255,255,255,0.9)';
         const labelY  = y > 20 ? y - 6 : y + sh + 14;
@@ -1894,24 +1947,24 @@
 
     _onDown(e) {
       this._dragging = true;
-      this._startX   = e.clientX;
-      this._startY   = e.clientY;
-      this._endX     = e.clientX;
-      this._endY     = e.clientY;
+      this._startX   = e.clientX * this._dpr;
+      this._startY   = e.clientY * this._dpr;
+      this._endX     = this._startX;
+      this._endY     = this._startY;
     }
 
     _onMove(e) {
       if (!this._dragging) return;
-      this._endX = e.clientX;
-      this._endY = e.clientY;
+      this._endX = e.clientX * this._dpr;
+      this._endY = e.clientY * this._dpr;
       this._draw(this._selRect());
     }
 
     _onUp(e) {
       if (!this._dragging) return;
       this._dragging = false;
-      this._endX     = e.clientX;
-      this._endY     = e.clientY;
+      this._endX     = e.clientX * this._dpr;
+      this._endY     = e.clientY * this._dpr;
 
       const rect = this._selRect();
       this._destroy();
@@ -1940,32 +1993,33 @@
      * DPR（Device Pixel Ratio）补偿以保证高分屏裁剪精度
      */
     _cropAndSend(rect) {
-      const dpr       = window.devicePixelRatio || 1;
-      const cropW     = Math.round(rect.width  * dpr);
-      const cropH     = Math.round(rect.height * dpr);
+      // rect 坐标已是物理像素（经 _onDown/Move/Up 乘以 _dpr），直接使用
+      const cropW = Math.round(rect.width);
+      const cropH = Math.round(rect.height);
 
       const offscreen = new OffscreenCanvas(cropW, cropH);
       const octx      = offscreen.getContext('2d');
 
       octx.drawImage(
         this._img,
-        rect.x * dpr, rect.y * dpr, cropW, cropH,
+        rect.x, rect.y, cropW, cropH,
         0, 0, cropW, cropH
       );
 
       offscreen.convertToBlob({ type: 'image/png' }).then((blob) => {
-        const reader    = new FileReader();
-        reader.onload   = () => {
-          const dataUrl  = reader.result;            // "data:image/png;base64,..."
-          const base64   = dataUrl.split(',')[1];
+        const reader  = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;            // "data:image/png;base64,..."
+          const base64  = dataUrl.split(',')[1];
 
-          // 发给 background；x/y 是页面坐标（用于定位结果面板）
+          const dpr = this._dpr || 1;
+          // 将物理像素坐标转回 CSS 像素页面坐标（用于定位结果面板）
           chrome.runtime.sendMessage({
             action:   'nya-vision-crop',
             base64,
             mimeType: 'image/png',
-            x: Math.round(rect.x + rect.width  / 2 + window.scrollX),
-            y: Math.round(rect.y + rect.height / 2 + window.scrollY),
+            x: Math.round(rect.x / dpr + rect.width  / dpr / 2 + window.scrollX),
+            y: Math.round(rect.y / dpr + rect.height / dpr / 2 + window.scrollY),
           });
         };
         reader.readAsDataURL(blob);
