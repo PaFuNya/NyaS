@@ -46,7 +46,11 @@
       "js": [
         "appearance.js",
         "material-select.js",
-        "content.js"
+        "content_utils.js",
+        "content_drag.js",
+        "content_panel.js",
+        "content_screenshot.js",
+        "content_main.js"
       ],
       "css": [
         "theme.css",
