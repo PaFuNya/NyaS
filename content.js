@@ -363,25 +363,29 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  AccordionCard — 单个模型的折叠展示卡片
+  //  AccordionCard — 单个模型的折叠卡片（combined-only：翻译+解释一并呈现）
+  //
+  //  状态模型简化：每张卡只有一个聚合状态机。
+  //    idle    — 占位，刚渲染骨架时
+  //    loading — 等后台返回
+  //    result  — 已收到 Markdown 结果
+  //    error   — 失败（含 notConfigured / timeout / API err）
   // ═══════════════════════════════════════════════════════════════════════════
 
   class AccordionCard {
-    constructor(modelId, modelLabel) {
-      this.modelId = modelId;
+    constructor(modelRowId, modelLabel) {
+      this.modelRowId = modelRowId;
       this.label = modelLabel;
-      this._useCombined = true;
-      this.state = {
-        translate: { status: 'idle', content: '' },
-        explain: { status: 'idle', content: '' },
-        combined: { status: 'idle', content: '' },
-      };
+      /** @type {{ status: 'idle'|'loading'|'result'|'error', content: string }} */
+      this.state = { status: 'idle', content: '' };
+      /** @type {((modelRowId: string) => void) | null} */
       this.onFetch = null;
 
       this._open = true;
       this._body = null;
       this._dot = null;
       this._chevron = null;
+      this._badgeEl = null;
       this.el = null;
 
       this._build();
@@ -398,7 +402,7 @@
       titleWrap.className = `${NS}-accordion-title`;
 
       const badge = document.createElement('span');
-      badge.className = `${NS}-accordion-badge ${NS}-accordion-badge--${this.modelId}`;
+      badge.className = `${NS}-accordion-badge`;
       badge.textContent = this.label;
       this._badgeEl = badge;
 
@@ -438,114 +442,87 @@
     }
 
     setLabel(label) {
+      if (!label) return;
       this.label = label;
       if (this._badgeEl) this._badgeEl.textContent = label;
     }
 
-    setLoading(action) {
-      if (action in this.state) {
-        this.state[action] = { status: 'loading', content: '' };
-      }
+    setLoading() {
+      this.state = { status: 'loading', content: '' };
       this._updateDot();
       this.forceOpen();
       this._renderBody();
     }
 
-    setResult(action, content) {
-      if (action in this.state) {
-        this.state[action] = { status: 'result', content };
-      }
+    setResult(content) {
+      this.state = { status: 'result', content: content || '' };
       this._updateDot();
       this._renderBody();
     }
 
-    setError(action, error) {
-      if (action in this.state) {
-        this.state[action] = { status: 'error', content: error };
-      }
-      this._updateDot();
-      this._renderBody();
-    }
-
-    reset() {
-      this.state = {
-        translate: { status: 'idle', content: '' },
-        explain: { status: 'idle', content: '' },
-        combined: { status: 'idle', content: '' },
-      };
+    setError(message) {
+      this.state = { status: 'error', content: message || '请求失败' };
       this._updateDot();
       this._renderBody();
     }
 
     _updateDot() {
-      const { translate, explain, combined } = this.state;
-      const relevant = this._useCombined
-        ? [combined]
-        : [translate, explain];
-
-      const hasError = relevant.some(s => s.status === 'error');
-      const hasLoading = relevant.some(s => s.status === 'loading');
-      const allResult = relevant.every(s => s.status === 'result');
-
-      if (hasError) {
-        this._dot.className = `${NS}-accordion-dot ${NS}-accordion-dot--error`;
-      } else if (hasLoading) {
-        this._dot.className = `${NS}-accordion-dot ${NS}-accordion-dot--loading`;
-      } else if (allResult) {
-        this._dot.className = `${NS}-accordion-dot ${NS}-accordion-dot--success`;
-      } else {
-        this._dot.className = `${NS}-accordion-dot`;
+      const cls = `${NS}-accordion-dot`;
+      switch (this.state.status) {
+        case 'loading':
+          this._dot.className = `${cls} ${cls}--loading`;
+          break;
+        case 'error':
+          this._dot.className = `${cls} ${cls}--error`;
+          break;
+        case 'result':
+          this._dot.className = `${cls} ${cls}--success`;
+          break;
+        default:
+          this._dot.className = cls;
       }
     }
 
     _renderBody() {
       this._body.innerHTML = '';
-      if (this._useCombined) {
-        this._renderBodyCombined();
-      } else {
-        this._renderBodySplit();
-      }
-    }
+      const { status, content } = this.state;
 
-    _renderBodyCombined() {
-      const { combined } = this.state;
-
-      if (combined.status === 'idle') {
+      if (status === 'idle') {
         const hint = document.createElement('p');
         hint.className = `${NS}-hint`;
-        hint.textContent = `由 ${this.label} 同时提供翻译与解释`;
+        hint.textContent = `等待 ${this.label} 启动…`;
         this._body.appendChild(hint);
         return;
       }
 
-      if (combined.status === 'loading') {
+      if (status === 'loading') {
         this._body.appendChild(this._buildLoader());
         return;
       }
 
-      if (combined.status === 'error') {
+      if (status === 'error') {
         const err = document.createElement('div');
         err.className = `${NS}-error`;
         err.style.cssText = 'margin:10px;';
-        err.textContent = `⚠️ ${combined.content}`;
+        err.textContent = `⚠️ ${content}`;
         this._body.appendChild(err);
 
         const retryBtn = this._btn('🔄 重试', () => {
-          this.onFetch?.(this.modelId, 'combined');
+          this.onFetch?.(this.modelRowId);
         }, true);
-        retryBtn.style.cssText = 'margin:8px 10px 12px; display:inline-flex;';
+        retryBtn.style.cssText = 'margin:0 10px 12px; display:inline-flex;';
         this._body.appendChild(retryBtn);
         return;
       }
 
-      if (combined.status === 'result') {
-        this._renderCombinedSections(combined.content);
+      if (status === 'result') {
+        this._renderCombinedSections(content);
       }
     }
 
     _renderCombinedSections(content) {
       const sectionRe = /^###\s+(.+)$/m;
-      const parts = content.split(/(?=^###\s+)/m).filter(s => s.trim());
+      const parts = content.split(/(?=^###\s+)/m).filter((s) => s.trim());
 
       if (parts.length === 0) {
         const section = document.createElement('div');
@@ -600,43 +577,6 @@
       });
     }
 
-    _renderBodySplit() {
-      const { translate, explain } = this.state;
-
-      const isLoading = translate.status === 'loading' || explain.status === 'loading';
-      const hasError = translate.status === 'error' || explain.status === 'error';
-      const allIdle = translate.status === 'idle' && explain.status === 'idle';
-
-      if (allIdle) {
-        const hint = document.createElement('p');
-        hint.className = `${NS}-hint`;
-        hint.textContent = `由 ${this.label} 为你提供翻译和解释`;
-        this._body.appendChild(hint);
-        return;
-      }
-
-      if (isLoading) {
-        this._body.appendChild(this._buildLoader());
-      }
-
-      if (translate.status === 'result' || translate.status === 'error') {
-        this._renderResultSection('translate', translate);
-      }
-
-      if (explain.status === 'result' || explain.status === 'error') {
-        this._renderResultSection('explain', explain);
-      }
-
-      if (hasError && !isLoading && translate.status !== 'result' && explain.status !== 'result') {
-        const retryBtn = this._btn('🔄 重试', () => {
-          if (translate.status === 'error') this.onFetch?.(this.modelId, 'translate');
-          if (explain.status === 'error') this.onFetch?.(this.modelId, 'explain');
-        }, true);
-        retryBtn.style.cssText = 'margin-top:12px; display:inline-flex;';
-        this._body.appendChild(retryBtn);
-      }
-    }
-
     _buildLoader() {
       const loader = document.createElement('div');
       loader.className = `${NS}-loading`;
@@ -660,35 +600,6 @@
       loader.appendChild(txt);
       loader.appendChild(dots);
       return loader;
-    }
-
-    _renderResultSection(type, state) {
-      const isError = state.status === 'error';
-      const isTranslate = type === 'translate';
-
-      const section = document.createElement('div');
-      section.className = `${NS}-result-section`;
-
-      const header = document.createElement('div');
-      header.className = `${NS}-result-header`;
-      header.textContent = isTranslate ? '🌐 翻译结果' : '📖 术语解释';
-
-      const body = document.createElement('div');
-      body.className = isError ? `${NS}-error` : `${NS}-result-body`;
-      body.textContent = isError ? `⚠️ ${state.content}` : state.content;
-
-      const footer = document.createElement('div');
-      footer.className = `${NS}-result-footer`;
-
-      if (!isError) {
-        footer.appendChild(this._copyBtn(state.content));
-      }
-
-      section.appendChild(header);
-      section.appendChild(body);
-      section.appendChild(footer);
-
-      this._body.appendChild(section);
     }
 
     _btn(label, onClick, ghost = false) {
@@ -790,15 +701,15 @@
       this.pinMode = 'unpinned';
       this._drag = null;
       this._resize = null;
-      this._cards = {};
+      /** @type {Map<string, AccordionCard>} key: modelRowId */
+      this._cards = new Map();
+      this._wrapEl = null;
       this._preview = null;
       this._pinDropdown = null;
       this._pinDropdownAbort = null;
       this._selectedText = '';
-      this._modelSelect = null;
-      this._selectedModelId = '';
-      this._selectedProvider = 'openai';
-      this._modelSelectMs = null;
+      this._currentRequestId = '';
+      this._msgListener = null;
     }
 
     get isPinned() { return this.pinMode !== 'unpinned'; }
@@ -806,31 +717,32 @@
 
     open(text, pos) {
       if (this.isOpen) {
-        this._updateText(text);
+        this.updateContent(text);
         return;
       }
 
+      this._selectedText = text;
       this.el = this._build(text);
       const clamped = this._clamp(pos.x, pos.y);
       this.el.style.left = `${clamped.left}px`;
       this.el.style.top = `${clamped.top}px`;
 
       document.body.appendChild(this.el);
-      this._refreshModelSelect();
+      this._attachMessageListener();
       requestAnimationFrame(() => this.el?.classList.add(`${NS}-panel--visible`));
 
       const pref = this._config.get('preferredAction');
       if (pref && pref !== 'none') {
-        this._fetchAll();
+        this._dispatchMulti();
       }
     }
 
     close() {
       if (!this.el) return;
 
-      if (this._modelSelectMs) {
-        this._modelSelectMs.destroy();
-        this._modelSelectMs = null;
+      if (this._msgListener) {
+        chrome.runtime.onMessage.removeListener(this._msgListener);
+        this._msgListener = null;
       }
 
       const el = this.el;
@@ -869,7 +781,7 @@
     updateContent(text) {
       this._selectedText = text;
       if (this._preview) this._preview.textContent = `"${this._truncate(text)}"`;
-      Object.values(this._cards).forEach((c) => c.reset());
+      this._renderSkeletonCards();
 
       if (this.el) {
         this.el.classList.add(`${NS}-panel--flash`);
@@ -878,7 +790,7 @@
 
       const pref = this._config.get('preferredAction');
       if (pref && pref !== 'none') {
-        this._fetchAll();
+        this._dispatchMulti();
       }
     }
 
@@ -897,6 +809,13 @@
         panel,
         NyaAppearance.mergeAppearance({ appearance: this._config.get('appearance') })
       );
+
+      // 防御式事件拦截：面板内任何点击都不得冒泡到 document，
+      // 避免 SelectionManager 的 closeUnpinned 把面板误销毁；
+      // 仅 stopPropagation，不 preventDefault，否则按钮、文本选择全瘫。
+      ['mousedown', 'mouseup', 'click'].forEach((evt) => {
+        panel.addEventListener(evt, (e) => { e.stopPropagation(); }, false);
+      });
 
       this._drag = new DragController(panel, panel.querySelector(`.${NS}-panel-header`), () => this._onDragEnd());
       this._resize = new ResizeController(panel, panel.querySelector(`.${NS}-resize-handle`), {
@@ -917,13 +836,7 @@
 
       const title = document.createElement('span');
       title.className = `${NS}-panel-title`;
-      title.textContent = 'NyaTransalte';
-
-      this._modelSelect = document.createElement('select');
-      this._modelSelect.className = `${NS}-panel-model-select`;
-      this._modelSelect.title = '选择模型';
-      this._modelSelect.addEventListener('click', (e) => e.stopPropagation());
-      this._modelSelect.addEventListener('change', () => this._onModelSelectChange());
+      title.textContent = 'NyaTranslate';
 
       const spacer = document.createElement('div');
       spacer.className = `${NS}-panel-spacer`;
@@ -1003,7 +916,6 @@
 
       header.appendChild(logo);
       header.appendChild(title);
-      header.appendChild(this._modelSelect);
       header.appendChild(spacer);
       header.appendChild(this._preview);
       header.appendChild(pinContainer);
@@ -1021,16 +933,37 @@
     _buildAccordionWrap() {
       const wrap = document.createElement('div');
       wrap.className = `${NS}-accordion-wrap`;
+      this._wrapEl = wrap;
+      this._renderSkeletonCards();
+      return wrap;
+    }
+
+    /**
+     * 按当前 enabled 模型列表为面板生成 N 张骨架卡（一卡一模型）。
+     * 每次划新词或配置变更时整体重建，确保卡片列表与 enabled 模型严格一致。
+     */
+    _renderSkeletonCards() {
+      if (!this._wrapEl) return;
+      this._wrapEl.innerHTML = '';
+      this._cards.clear();
 
       const enabled = this._getEnabledModels();
-      const first = enabled[0];
-      const modelLabel = (first && (first.displayName || first.modelId)) || 'AI 翻译';
-      const card = new AccordionCard('primary', modelLabel);
-      card.onFetch = (_, action) => this._fetchModel('primary', action);
-      this._cards['primary'] = card;
-      wrap.appendChild(card.el);
+      if (enabled.length === 0) {
+        const hint = document.createElement('div');
+        hint.className = `${NS}-hint`;
+        hint.style.cssText = 'padding:18px 14px;text-align:center;line-height:1.7;';
+        hint.textContent = '尚未启用任何模型，请前往设置页配置后再试 ~';
+        this._wrapEl.appendChild(hint);
+        return;
+      }
 
-      return wrap;
+      enabled.forEach((m) => {
+        const label = m.displayName || m.modelId || m.id;
+        const card = new AccordionCard(m.id, label);
+        card.onFetch = (modelRowId) => this._retryOne(modelRowId);
+        this._cards.set(m.id, card);
+        this._wrapEl.appendChild(card.el);
+      });
     }
 
     _buildResizeHandle() {
@@ -1142,109 +1075,96 @@
         .filter((m) => m && m.enabled);
     }
 
-    _refreshModelSelect() {
-      if (!this._modelSelect) return;
-      if (this._modelSelectMs) {
-        this._modelSelectMs.destroy();
-        this._modelSelectMs = null;
-      }
+    /**
+     * 多引擎并行调度入口：
+     *   1. 生成新 requestId，标记当前查询批次
+     *   2. 把所有卡片切到 loading 骨架
+     *   3. 发一条 nya-multi-translate；后台并发打所有 enabled 模型，
+     *      逐个 settle 后通过 chrome.tabs.sendMessage 推回到 _msgListener
+     */
+    _dispatchMulti() {
+      const text = this._selectedText;
+      if (!text) return;
+      if (this._cards.size === 0) return;
 
-      const list = this._getEnabledModels();
-      this._modelSelect.innerHTML = '';
+      const requestId = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+        ? crypto.randomUUID()
+        : `r-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+      this._currentRequestId = requestId;
 
-      if (list.length === 0) {
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = '无可用模型';
-        this._modelSelect.appendChild(opt);
-        this._modelSelect.disabled = true;
-        this._selectedModelId = '';
-        this._selectedProvider = 'openai';
-        this._cards.primary?.setLabel('—');
-        if (typeof MaterialSelect !== 'undefined') {
-          this._modelSelectMs = new MaterialSelect(this._modelSelect, { compact: true });
-        }
-        return;
-      }
+      this._cards.forEach((card) => card.setLoading());
 
-      this._modelSelect.disabled = false;
-      let keepIdx = -1;
-      list.forEach((m, i) => {
-        const opt = document.createElement('option');
-        opt.value = m.id;
-        opt.textContent = m.displayName || m.modelId || m.id;
-        opt.dataset.modelId = m.id;
-        opt.dataset.provider = m.protocol === 'anthropic' ? 'anthropic' : 'openai';
-        if (m.id === this._selectedModelId) keepIdx = i;
-        this._modelSelect.appendChild(opt);
-      });
-
-      const idx = keepIdx >= 0 ? keepIdx : 0;
-      this._modelSelect.selectedIndex = idx;
-      const picked = list[idx];
-      this._selectedModelId = picked.id;
-      this._selectedProvider = picked.protocol === 'anthropic' ? 'anthropic' : 'openai';
-      const label = picked.displayName || picked.modelId || picked.id;
-      this._cards.primary?.setLabel(label);
-
-      if (typeof MaterialSelect !== 'undefined') {
-        this._modelSelectMs = new MaterialSelect(this._modelSelect, { compact: true });
-      }
-    }
-
-    _onModelSelectChange() {
-      const opt = this._modelSelect?.selectedOptions[0];
-      if (!opt || !opt.dataset.modelId) return;
-      this._selectedModelId = opt.dataset.modelId;
-      this._selectedProvider = opt.dataset.provider === 'anthropic' ? 'anthropic' : 'openai';
-      this._cards.primary?.setLabel(opt.textContent || this._selectedModelId);
-      Object.values(this._cards).forEach((c) => c.reset());
-      const pref = this._config.get('preferredAction');
-      if (pref && pref !== 'none') {
-        this._fetchAll();
-      }
-    }
-
-    _fetchAll() {
-      // 单模型，发送一次 combined 请求即可
-      this._fetchModel('primary', 'combined');
-    }
-
-    _fetchModel(cardId, action) {
-      const card = this._cards[cardId];
-      if (!card) return;
-
-      card.setLoading(action);
       chrome.runtime.sendMessage(
-        {
-          action,
-          text: this._selectedText,
-          targetModelId: this._selectedModelId,
-        },
-        (response) => {
+        { action: 'nya-multi-translate', text, requestId },
+        () => {
           if (!this.isOpen) return;
           if (chrome.runtime.lastError) {
-            card.setError(action, '无法连接扩展后台，请在 chrome://extensions 页面重新加载扩展。');
-          } else if (response?.success) {
-            card.setResult(action, response.result);
-          } else if (response?.notConfigured) {
-            // 未配置时显示引导性提示，非红色报错
-            card.setError(action, response.error || '请先在设置页配置 API Key 和模型 ID 喵~');
-          } else {
-            card.setError(action, response?.error ?? '请求失败，请稍后重试。');
+            this._cards.forEach((c) => c.setError(
+              '无法连接扩展后台，请在 chrome://extensions 页面重新加载扩展。'
+            ));
           }
         }
       );
     }
 
-    _updateText(text) {
-      this._selectedText = text;
-      if (this._preview) this._preview.textContent = `"${this._truncate(text)}"`;
-      Object.values(this._cards).forEach((c) => c.reset());
-      const pref = this._config.get('preferredAction');
-      if (pref && pref !== 'none') {
-        this._fetchAll();
-      }
+    /**
+     * 单卡片重试：仅重新打这个 modelRowId 对应的模型。
+     */
+    _retryOne(modelRowId) {
+      const card = this._cards.get(modelRowId);
+      if (!card) return;
+      const text = this._selectedText;
+      if (!text) return;
+
+      // 复用当前 requestId：保持回执匹配，不污染其他卡片的状态
+      const requestId = this._currentRequestId
+        || ((typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+          ? crypto.randomUUID()
+          : `r-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`);
+      this._currentRequestId = requestId;
+
+      card.setLoading();
+      chrome.runtime.sendMessage(
+        { action: 'nya-translate-single', text, requestId, modelRowId },
+        () => {
+          if (!this.isOpen) return;
+          if (chrome.runtime.lastError) {
+            card.setError('无法连接扩展后台，请在 chrome://extensions 重新加载扩展。');
+          }
+        }
+      );
+    }
+
+    /**
+     * 监听后台精准回执：只接受 requestId 匹配当前批次的消息，
+     * 旧请求迟到结果会被静默丢弃，不会污染新内容。
+     */
+    _attachMessageListener() {
+      if (this._msgListener) return;
+
+      this._msgListener = (msg) => {
+        if (!this.isOpen) return;
+        if (!msg || typeof msg !== 'object') return;
+
+        if (msg.action === 'nya-multi-result' && msg.requestId === this._currentRequestId) {
+          const card = this._cards.get(msg.modelRowId);
+          if (!card) return;
+          if (msg.label) card.setLabel(msg.label);
+          if (msg.status === 'success') {
+            card.setResult(msg.result || '');
+          } else {
+            card.setError(msg.error || '请求失败');
+          }
+          return;
+        }
+
+        if (msg.action === 'nya-multi-empty' && msg.requestId === this._currentRequestId) {
+          // 后台告知没有 enabled 模型——卡片已为空，但为冗余兜底
+          this._cards.forEach((c) => c.setError(msg.error || '没有启用的模型'));
+        }
+      };
+
+      chrome.runtime.onMessage.addListener(this._msgListener);
     }
 
     _clamp(x, y, w = 360, h = 420) {
@@ -1438,9 +1358,13 @@
       }
     }
 
-    refreshModelSelectsFromConfig() {
+    /**
+     * 配置（enabled 模型集合）变更时实时刷新所有打开面板的卡片骨架。
+     * 不自动重发请求，避免用户在设置页改动时无意触发 API 调用。
+     */
+    refreshCardsFromConfig() {
       for (const panel of this._panels.values()) {
-        panel._refreshModelSelect?.();
+        if (panel.isOpen) panel._renderSkeletonCards?.();
       }
     }
 
@@ -1586,7 +1510,7 @@
           } else {
             const activePanel = this._app.panels.activePanel;
             if (activePanel?.isOpen) {
-              activePanel._updateText(text);
+              activePanel.updateContent(text);
             } else {
               this._app.panels.createPanel(text, { x: capturedE.pageX, y: capturedE.pageY }, 'unpinned');
             }
@@ -1600,9 +1524,14 @@
     }
 
     _onClick(e) {
-      if (this._app.panels.contains(e.target)) return;
+      const t = e.target;
+      if (this._app.panels.contains(t)) return;
+      // 与 _onUp 一致的 closest 兜底：防止 e.target 是已脱离 panel 树的 portal 元素
+      if (t?.closest?.(`.${NS}-panel`)) return;
+      // 任何 MaterialSelect 风格的 portal 菜单都不应触发面板销毁
+      if (t?.closest?.('.nya-ms__menu')) return;
       this._app.panels.closeUnpinned();
-      if (!this._app.icon.contains(e.target)) {
+      if (!this._app.icon.contains(t)) {
         this._app.icon.hide();
       }
     }
@@ -2086,7 +2015,7 @@
         if (area !== 'local') return;
         if (changes.models) {
           this.config.load().then(() => {
-            this.panels.refreshModelSelectsFromConfig();
+            this.panels.refreshCardsFromConfig();
           });
         }
         if (changes.appearance) {
@@ -2095,7 +2024,7 @@
           });
         }
       });
-      console.debug('[NyaTranslate v3.2] 初始化完成 — models 列表 + 面板模型选择。');
+      console.debug('[NyaTranslate v4.1] 初始化完成 — 多引擎并行卡片流。');
     }
 
     /**

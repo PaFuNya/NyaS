@@ -470,6 +470,131 @@ async function fetchVision(base64, mimeType) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+//  多引擎并发调度器
+//  对标沙拉查词：一次性向所有已启用模型发起并行请求，
+//  每个完成（或报错）后立即通过 chrome.tabs.sendMessage 单独推送回 content.js，
+//  绝不等齐所有模型。
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Promise 超时包装，避免单个挂死请求永久阻塞卡片
+ * @template T
+ * @param {Promise<T>} promise
+ * @param {number} ms
+ * @param {string} msg
+ * @returns {Promise<T>}
+ */
+function withTimeout(promise, ms, msg) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(msg)), ms);
+    promise.then(
+      (v) => { clearTimeout(t); resolve(v); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
+
+/**
+ * 单模型执行单元：负责校验、发起 API、推送结果或错误。
+ * 任何异常都被自身吞下，不会冒泡导致 Promise.all 整体 reject。
+ * @param {{ id:string, modelId:string, displayName:string, protocol:string, baseUrl:string, apiKey:string, enabled:boolean }} row
+ * @param {Record<string, unknown>} stored
+ * @param {{ text:string, requestId:string, tabId:number, pageTitle:string }} ctx
+ */
+async function runOneModel(row, stored, { text, requestId, tabId, pageTitle }) {
+  const cfg   = buildCfgForModel(stored, { targetModelId: row.id });
+  const label = cfg.label || row.displayName || row.modelId;
+
+  const fail = (err, notConfigured = false) => chrome.tabs.sendMessage(tabId, {
+    action:        'nya-multi-result',
+    requestId,
+    modelRowId:    row.id,
+    status:        'error',
+    error:         err?.message || String(err),
+    notConfigured: !!notConfigured || !!err?.notConfigured,
+    label,
+  }).catch(() => {});
+
+  if (!cfg.hasRow)    return fail(new Error('模型配置丢失'), true);
+  if (cfg.missingKey) return fail(new Error('该模型的 API Key 未配置，请前往设置页填写'), true);
+  if (!cfg.model)     return fail(new Error('该模型的 Model ID 无效，请前往设置页检查'), true);
+
+  try {
+    const sysPrompt = buildSystemPrompt('combined');
+    const adapter   = cfg.protocol === 'anthropic' ? ClaudeAdapter : OpenAIAdapter;
+    const result    = await withTimeout(
+      adapter.fetchText(text, sysPrompt, cfg.apiKey, cfg),
+      30000,
+      `${label} 请求超时（30s）`,
+    );
+
+    chrome.tabs.sendMessage(tabId, {
+      action:     'nya-multi-result',
+      requestId,
+      modelRowId: row.id,
+      status:     'success',
+      result,
+      label,
+    }).catch(() => {});
+
+    HistoryManager.save({
+      originalText: text,
+      result,
+      model: label,
+      pageTitle,
+    });
+  } catch (err) {
+    fail(err);
+  }
+}
+
+/**
+ * 多引擎并行入口：读取所有 enabled 模型，Promise.all 同时发车，
+ * 每个 settle 立即通过 chrome.tabs.sendMessage 单独推送结果。
+ * @param {{ text:string, requestId:string, tabId:number, pageTitle:string }} ctx
+ */
+async function dispatchMultiTranslate({ text, requestId, tabId, pageTitle }) {
+  const stored  = await chrome.storage.local.get(null);
+  const enabled = ensureModelsArray(stored).filter((m) => m.enabled);
+
+  if (enabled.length === 0) {
+    chrome.tabs.sendMessage(tabId, {
+      action: 'nya-multi-empty',
+      requestId,
+      error:  '尚未启用任何模型，请前往设置页配置。',
+    }).catch(() => {});
+    return;
+  }
+
+  await Promise.all(enabled.map((row) => runOneModel(row, stored, {
+    text, requestId, tabId, pageTitle,
+  })));
+}
+
+/**
+ * 单卡片重试入口：仅对一个 modelRowId 重新发起请求。
+ * @param {{ text:string, requestId:string, modelRowId:string, tabId:number, pageTitle:string }} ctx
+ */
+async function dispatchSingleTranslate({ text, requestId, modelRowId, tabId, pageTitle }) {
+  const stored = await chrome.storage.local.get(null);
+  const row    = ensureModelsArray(stored).find((m) => m.id === modelRowId && m.enabled);
+
+  if (!row) {
+    chrome.tabs.sendMessage(tabId, {
+      action:     'nya-multi-result',
+      requestId,
+      modelRowId,
+      status:     'error',
+      error:      '该模型不存在或已禁用',
+      label:      '',
+    }).catch(() => {});
+    return;
+  }
+
+  await runOneModel(row, stored, { text, requestId, tabId, pageTitle });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 //  HistoryManager — 本地翻译历史（chrome.storage.local）
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -666,7 +791,44 @@ chrome.commands.onCommand.addListener(async (command) => {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const { action } = message;
 
-  // ── 文本翻译/解释 ──────────────────────────────────────────────────────
+  // ── 多引擎并行翻译（v4 主路径） ──────────────────────────────────────
+  if (action === 'nya-multi-translate') {
+    if (!sender.tab) return false;
+    const { text, requestId } = message;
+    if (!text || typeof text !== 'string' || !text.trim()) {
+      sendResponse({ success: false, error: '文本无效' });
+      return true;
+    }
+    dispatchMultiTranslate({
+      text:      text.trim(),
+      requestId: String(requestId || ''),
+      tabId:     sender.tab.id,
+      pageTitle: sender.tab.title || '',
+    });
+    sendResponse({ success: true, accepted: true });
+    return false;
+  }
+
+  // ── 单卡片重试 ─────────────────────────────────────────────────────────
+  if (action === 'nya-translate-single') {
+    if (!sender.tab) return false;
+    const { text, requestId, modelRowId } = message;
+    if (!text || typeof text !== 'string' || !text.trim() || !modelRowId) {
+      sendResponse({ success: false, error: '参数无效' });
+      return true;
+    }
+    dispatchSingleTranslate({
+      text:       text.trim(),
+      requestId:  String(requestId || ''),
+      modelRowId: String(modelRowId),
+      tabId:      sender.tab.id,
+      pageTitle:  sender.tab.title || '',
+    });
+    sendResponse({ success: true, accepted: true });
+    return false;
+  }
+
+  // ── 文本翻译/解释（v3 兼容路径，popup 等仍在使用） ───────────────────
   if (['translate', 'explain', 'combined'].includes(action)) {
     if (!sender.tab) return false;
 
@@ -765,4 +927,4 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return false;
 });
 
-console.log('[NyaTranslate] Background Service Worker v4.0 已启动（每模型独立鉴权）。');
+console.log('[NyaTranslate] Background Service Worker v4.1 已启动（多引擎并行 + 每模型独立鉴权）。');
