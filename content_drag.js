@@ -1,22 +1,24 @@
 /**
  * content_drag.js — 交互层
  *
- * 包含：DragController（面板拖拽 + 视口边界碰撞 + RAF 丝滑）、
- *       ResizeController（右下角缩放手柄 + RAF 丝滑）
+ * 包含：DragController（面板拖拽）、ResizeController（右下角缩放手柄）
  *
  * 依赖：无
  *
- * 核心修复说明：
- *   - mousemove / mouseup 统一绑定到 window（覆盖鼠标飞出浏览器的场景）
- *   - DOM 坐标更新严格包裹在 requestAnimationFrame 中，高频事件只更新缓存坐标
- *   - 拖拽开始时 document.body 加 user-select:none，结束后还原，防文本误选
- *   - destroy() 彻底清理 RAF、window 监听和 userSelect 残留
+ * 核心机制：Pointer Events API + setPointerCapture
+ *   - pointerdown 触发时立即调用 setPointerCapture，浏览器将后续所有指针事件
+ *     强制路由到捕获元素，彻底绕过宿主页面 iframe / Canvas / 其他拦截元素；
+ *   - pointermove / pointerup / pointercancel 均绑在 handleEl 本身，
+ *     无需 window 级别委托，也无需 window.blur 兜底；
+ *   - pointercancel 覆盖触控板手势冲突、系统弹窗等 Mouse Events 无法感知的取消；
+ *   - touch-action:none + ondragstart:false 从 CSS/JS 双层封杀原生拖拽干扰；
+ *   - RAF 节流保证每帧最多一次 DOM 写入，边界约束防面板拖飞。
  */
 
 'use strict';
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  DragController — 鼠标拖拽面板
+//  DragController — 面板拖拽（Pointer Events + Pointer Capture）
 // ═══════════════════════════════════════════════════════════════════════════
 
 class DragController {
@@ -27,55 +29,68 @@ class DragController {
 
     this._active    = false;
     this._rafId     = null;
+    this._pointerId = null;  // 记录当前活跃指针 ID
 
-    // 鼠标起点（clientX/Y）与面板起点（left/top）
+    // 指针起点（clientX/Y）与面板起点（left/top px）
     this._ox = 0; this._oy = 0;
     this._pl = 0; this._pt = 0;
 
-    // mousemove 缓存：RAF 帧内读取最新值
+    // pointermove 高频缓存：只在 RAF 帧内写 DOM
     this._curX = 0; this._curY = 0;
 
-    this._down = this._down.bind(this);
-    this._move = this._move.bind(this);
-    this._up   = this._up.bind(this);
+    // 预存绑定引用，addEventListener / removeEventListener 使用同一变量
+    this._boundPointerDown   = this.handlePointerDown.bind(this);
+    this._boundPointerMove   = this.handlePointerMove.bind(this);
+    this._boundPointerUp     = this.handlePointerUp.bind(this);
+    this._boundPointerCancel = this.handlePointerCancel.bind(this);
 
-    handleEl.addEventListener('mousedown', this._down);
-    handleEl.style.cursor = 'grab';
+    // 核心 2：CSS + JS 双层封杀原生拖拽
+    handleEl.style.touchAction    = 'none';   // Pointer Capture 必需
+    handleEl.style.userSelect     = 'none';
+    handleEl.style.webkitUserDrag = 'none';
+    handleEl.ondragstart          = () => false;
+    handleEl.style.cursor         = 'grab';
+
+    handleEl.addEventListener('pointerdown', this._boundPointerDown);
   }
 
-  _down(e) {
-    if (e.button !== 0) return;
-    if (e.target.closest('button') || e.target.closest('select')) return;
+  // 核心 2：preventDefault 绝对置首，封死原生拖拽对后续事件的拦截
+  handlePointerDown(e) {
     e.preventDefault();
+    if (e.button !== 0) return;  // 仅响应左键（touch 的 button 也为 0）
+    if (e.target.closest('button') || e.target.closest('select')) return;
     e.stopPropagation();
 
+    // 核心 1：指针捕获——后续所有指针事件强制路由到此元素
+    e.target.setPointerCapture(e.pointerId);
+    this._pointerId = e.pointerId;
+
     this._active = true;
-    this._ox = e.clientX;
-    this._oy = e.clientY;
+    this._ox   = e.clientX;
+    this._oy   = e.clientY;
     this._curX = e.clientX;
     this._curY = e.clientY;
-    this._pl = parseInt(this._panel.style.left, 10) || 0;
-    this._pt = parseInt(this._panel.style.top,  10) || 0;
+    this._pl   = parseInt(this._panel.style.left, 10) || 0;
+    this._pt   = parseInt(this._panel.style.top,  10) || 0;
 
-    // ★ 绑定到 window：确保鼠标快速移出窗口后仍能捕获 mouseup
-    window.addEventListener('mousemove', this._move, { passive: true });
-    window.addEventListener('mouseup',   this._up);
+    // 监听绑在 handleEl 自身：capture 保证无论指针飞到哪里都能送达
+    this._handle.addEventListener('pointermove',   this._boundPointerMove);
+    this._handle.addEventListener('pointerup',     this._boundPointerUp);
+    this._handle.addEventListener('pointercancel', this._boundPointerCancel);
 
-    this._handle.style.cursor    = 'grabbing';
-    this._panel.style.transition = 'none';
-
-    // ★ 防止拖拽途中误触发文字选中
+    this._handle.style.cursor      = 'grabbing';
+    this._panel.style.transition   = 'none';
     document.body.style.userSelect = 'none';
   }
 
-  _move(e) {
-    if (!this._active) return;
+  handlePointerMove(e) {
+    if (e.pointerId !== this._pointerId) return;  // 忽略多点触控的其他指针
 
-    // 仅缓存最新坐标，不直接操作 DOM
+    // 仅缓存坐标，不直接操作 DOM
     this._curX = e.clientX;
     this._curY = e.clientY;
 
-    // ★ RAF 节流：每帧最多执行一次 DOM 写入
+    // 核心 3：RAF 节流——同一帧内多次 pointermove 只触发一次布局
     if (this._rafId !== null) return;
     this._rafId = requestAnimationFrame(() => {
       this._rafId = null;
@@ -91,11 +106,11 @@ class DragController {
 
       let left, top;
       if (isFixed) {
-        // fixed 定位：直接相对视口约束
+        // fixed 定位：相对视口约束，面板不得飞出屏幕
         left = Math.max(8, Math.min(this._pl + dx, vw - pw - 8));
         top  = Math.max(8, Math.min(this._pt + dy, vh - ph - 8));
       } else {
-        // absolute 定位：叠加滚动偏移约束
+        // absolute 定位：叠加滚动偏移后约束
         const sx = window.scrollX, sy = window.scrollY;
         left = Math.max(sx + 8, Math.min(this._pl + dx, sx + vw - pw - 8));
         top  = Math.max(sy + 8, Math.min(this._pt + dy, sy + vh - ph - 8));
@@ -106,46 +121,62 @@ class DragController {
     });
   }
 
-  _up() {
-    if (!this._active) return;
-    this._active = false;
+  handlePointerUp(e) {
+    if (e.pointerId !== this._pointerId) return;
+    // pointerup 时浏览器已自动释放 capture，显式调用更保险
+    if (this._handle.hasPointerCapture(e.pointerId)) {
+      this._handle.releasePointerCapture(e.pointerId);
+    }
+    this._stopDrag();
+  }
 
-    // ★ 立即取消未执行的 RAF，避免 up 后再次触发残余帧
+  // 核心 4（兜底）：系统弹窗、触控板手势冲突等系统级取消
+  handlePointerCancel(e) {
+    if (e.pointerId !== this._pointerId) return;
+    this._stopDrag();
+  }
+
+  _stopDrag() {
+    if (!this._active) return;
+    this._active    = false;
+    this._pointerId = null;
+
     if (this._rafId !== null) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
 
-    // ★ 从 window 上彻底解绑，不留任何残余监听
-    window.removeEventListener('mousemove', this._move);
-    window.removeEventListener('mouseup',   this._up);
+    this._handle.removeEventListener('pointermove',   this._boundPointerMove);
+    this._handle.removeEventListener('pointerup',     this._boundPointerUp);
+    this._handle.removeEventListener('pointercancel', this._boundPointerCancel);
 
-    this._handle.style.cursor    = 'grab';
-    this._panel.style.transition = '';
-
-    // ★ 恢复文字选中能力
+    this._handle.style.cursor      = 'grab';
+    this._panel.style.transition   = '';
     document.body.style.userSelect = '';
 
-    if (typeof this._onDragEnd === 'function') {
-      this._onDragEnd();
-    }
+    this._onDragEnd?.();
   }
 
   destroy() {
-    this._handle.removeEventListener('mousedown', this._down);
-    window.removeEventListener('mousemove', this._move);
-    window.removeEventListener('mouseup',   this._up);
+    this._handle.removeEventListener('pointerdown',   this._boundPointerDown);
+    this._handle.removeEventListener('pointermove',   this._boundPointerMove);
+    this._handle.removeEventListener('pointerup',     this._boundPointerUp);
+    this._handle.removeEventListener('pointercancel', this._boundPointerCancel);
+
+    // 兜底释放（面板被强制销毁时 _stopDrag 可能未执行）
+    if (this._pointerId !== null && this._handle.hasPointerCapture(this._pointerId)) {
+      this._handle.releasePointerCapture(this._pointerId);
+    }
     if (this._rafId !== null) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
-    // 兜底清理（面板被强制销毁时 _up 可能未执行）
     document.body.style.userSelect = '';
   }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-//  ResizeController — 面板右下角缩放手柄
+//  ResizeController — 面板右下角缩放手柄（Pointer Events + Pointer Capture）
 // ═══════════════════════════════════════════════════════════════════════════
 
 class ResizeController {
@@ -155,26 +186,36 @@ class ResizeController {
     this._minWidth  = options.minWidth  ?? 300;
     this._minHeight = options.minHeight ?? 200;
 
-    this._active = false;
-    this._rafId  = null;
+    this._active    = false;
+    this._rafId     = null;
+    this._pointerId = null;
 
     this._ox = 0; this._oy = 0;
     this._ow = 0; this._oh = 0;
 
-    // mousemove 缓存
     this._curX = 0; this._curY = 0;
 
-    this._down = this._down.bind(this);
-    this._move = this._move.bind(this);
-    this._up   = this._up.bind(this);
+    this._boundPointerDown   = this.handlePointerDown.bind(this);
+    this._boundPointerMove   = this.handlePointerMove.bind(this);
+    this._boundPointerUp     = this.handlePointerUp.bind(this);
+    this._boundPointerCancel = this.handlePointerCancel.bind(this);
 
-    handleEl.addEventListener('mousedown', this._down);
+    // 封杀原生拖拽
+    handleEl.style.touchAction    = 'none';
+    handleEl.style.userSelect     = 'none';
+    handleEl.style.webkitUserDrag = 'none';
+    handleEl.ondragstart          = () => false;
+
+    handleEl.addEventListener('pointerdown', this._boundPointerDown);
   }
 
-  _down(e) {
-    if (e.button !== 0) return;
+  handlePointerDown(e) {
     e.preventDefault();
+    if (e.button !== 0) return;
     e.stopPropagation();
+
+    e.target.setPointerCapture(e.pointerId);
+    this._pointerId = e.pointerId;
 
     this._active = true;
     this._ox   = e.clientX;
@@ -184,16 +225,16 @@ class ResizeController {
     this._ow   = this._panel.offsetWidth;
     this._oh   = this._panel.offsetHeight;
 
-    // ★ 绑定到 window
-    window.addEventListener('mousemove', this._move, { passive: true });
-    window.addEventListener('mouseup',   this._up);
+    this._handle.addEventListener('pointermove',   this._boundPointerMove);
+    this._handle.addEventListener('pointerup',     this._boundPointerUp);
+    this._handle.addEventListener('pointercancel', this._boundPointerCancel);
 
     this._panel.style.transition   = 'none';
     document.body.style.userSelect = 'none';
   }
 
-  _move(e) {
-    if (!this._active) return;
+  handlePointerMove(e) {
+    if (e.pointerId !== this._pointerId) return;
 
     this._curX = e.clientX;
     this._curY = e.clientY;
@@ -211,26 +252,46 @@ class ResizeController {
     });
   }
 
-  _up() {
+  handlePointerUp(e) {
+    if (e.pointerId !== this._pointerId) return;
+    if (this._handle.hasPointerCapture(e.pointerId)) {
+      this._handle.releasePointerCapture(e.pointerId);
+    }
+    this._stopResize();
+  }
+
+  handlePointerCancel(e) {
+    if (e.pointerId !== this._pointerId) return;
+    this._stopResize();
+  }
+
+  _stopResize() {
     if (!this._active) return;
-    this._active = false;
+    this._active    = false;
+    this._pointerId = null;
 
     if (this._rafId !== null) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
     }
 
-    window.removeEventListener('mousemove', this._move);
-    window.removeEventListener('mouseup',   this._up);
+    this._handle.removeEventListener('pointermove',   this._boundPointerMove);
+    this._handle.removeEventListener('pointerup',     this._boundPointerUp);
+    this._handle.removeEventListener('pointercancel', this._boundPointerCancel);
 
     this._panel.style.transition   = '';
     document.body.style.userSelect = '';
   }
 
   destroy() {
-    this._handle.removeEventListener('mousedown', this._down);
-    window.removeEventListener('mousemove', this._move);
-    window.removeEventListener('mouseup',   this._up);
+    this._handle.removeEventListener('pointerdown',   this._boundPointerDown);
+    this._handle.removeEventListener('pointermove',   this._boundPointerMove);
+    this._handle.removeEventListener('pointerup',     this._boundPointerUp);
+    this._handle.removeEventListener('pointercancel', this._boundPointerCancel);
+
+    if (this._pointerId !== null && this._handle.hasPointerCapture(this._pointerId)) {
+      this._handle.releasePointerCapture(this._pointerId);
+    }
     if (this._rafId !== null) {
       cancelAnimationFrame(this._rafId);
       this._rafId = null;
